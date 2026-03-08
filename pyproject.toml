@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omneva"
+version = "1.0.0"
+description = "Native cross-platform media player, transcoder, and converter"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Meet"}]
+
+dependencies = [
+    "PySide6>=6.6.0",
+    "python-vlc>=3.0.20",
+]
+
+[project.scripts]
+omneva = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]

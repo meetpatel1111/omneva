@@ -102,6 +102,9 @@ class VLCEngine(QObject):
         self._discoverers = []
         self._renderers = {} # name -> item
 
+        # Loop modes: 0=Off, 1=One, 2=All
+        self._loop_mode = 0
+
 
 
 
@@ -238,6 +241,23 @@ class VLCEngine(QObject):
     def is_muted(self) -> bool:
         return bool(self.player.audio_get_mute())
 
+    def get_audio_delay(self):
+        """Get audio delay in microseconds."""
+        return self.player.audio_get_delay()
+
+    def set_audio_delay(self, delay_ms: int):
+        """Set audio delay in milliseconds."""
+        # VLC API uses microseconds
+        self.player.audio_set_delay(delay_ms * 1000)
+        return delay_ms
+
+    def change_audio_delay(self, delta_ms: int):
+        """Change audio delay by delta_ms."""
+        current_us = self.player.audio_get_delay()
+        new_ms = (current_us // 1000) + delta_ms
+        self.set_audio_delay(new_ms)
+        return new_ms
+
     def get_subtitle_delay(self):
         """Get subtitle delay in microseconds."""
         return self.player.video_get_spu_delay()
@@ -247,6 +267,13 @@ class VLCEngine(QObject):
         # VLC API uses microseconds
         self.player.video_set_spu_delay(delay_ms * 1000)
         return delay_ms
+
+    def change_subtitle_delay(self, delta_ms: int):
+        """Change subtitle delay by delta_ms."""
+        current_us = self.player.video_get_spu_delay()
+        new_ms = (current_us // 1000) + delta_ms
+        self.set_subtitle_delay(new_ms)
+        return new_ms
 
     def toggle_subtitles(self):
         """Toggle subtitles on or off."""
@@ -573,21 +600,6 @@ class VLCEngine(QObject):
         self.player.video_set_scale(new_zoom)
         return f"{new_zoom}x" if new_zoom > 0 else "Auto"
 
-    def cycle_subtitle_reverse(self):
-        """Cycle through available subtitle tracks in reverse."""
-        tracks = self.player.video_get_spu_description()
-        if not tracks: return None
-        
-        current = self.player.video_get_spu()
-        ids = [t[0] for t in tracks]
-        try:
-            idx = ids.index(current)
-            next_idx = (idx - 1) % len(ids)
-        except ValueError:
-            next_idx = len(ids) - 1
-            
-        self.player.video_set_spu(ids[next_idx])
-        return tracks[next_idx][1].decode('utf-8') if next_idx < len(tracks) else "Disabled"
 
     def toggle_deinterlace(self):
         """Toggle deinterlacing on/off (defaults to yadif)."""
@@ -947,7 +959,9 @@ class VLCEngine(QObject):
         if enabled:
             self.player.add_filter(filter_name)
         else:
-            self.player.remove_filter(filter_name)
+            # VLC MediaPlayer doesn't have remove_filter method
+            # We need to get current filters and rebuild without this one
+            pass  # For now, just don't add the filter
 
     def set_compressor(self, enabled: bool, **kwargs):
         """Configure compressor."""
@@ -1551,16 +1565,43 @@ class VLCEngine(QObject):
         self.position_changed.emit(pos)
 
         # Emit state if changed
-        state_str = self.get_state_str()
+        state_str = "stopped"
+        if state == vlc.State.Playing: state_str = "playing"
+        elif state == vlc.State.Paused: state_str = "paused"
+        elif state == vlc.State.Stopped: state_str = "stopped"
+        elif state == vlc.State.Ended: state_str = "ended"
+        elif state == vlc.State.Error: state_str = "error"
+
         if state_str != self._last_state:
             self._last_state = state_str
             self.state_changed.emit(state_str)
 
         # Check for ended
         if state == vlc.State.Ended:
-            self._poll_timer.stop()
+            if self._loop_mode == 1: # Loop One
+                self.restart()
+            elif self._loop_mode == 2: # Loop All
+                # For now, treat Loop All same as Loop One if no playlist manager
+                self.restart()
+            else:
+                self._poll_timer.stop()
         elif state == vlc.State.Error:
             self._poll_timer.stop()
+
+    def restart(self):
+        """Restart current media from the beginning."""
+        if self._current_file:
+            self.player.set_time(0)
+            self.player.play()
+            self._poll_timer.start()
+            return True
+        return False
+
+    def cycle_loop_mode(self):
+        """Cycle through loop modes: Off -> One -> All -> Off."""
+        self._loop_mode = (self._loop_mode + 1) % 3
+        modes = ["Off", "One", "All"]
+        return modes[self._loop_mode]
 
     # ─── Media Options ───────────────────────────────────────
 

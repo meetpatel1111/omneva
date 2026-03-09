@@ -17,6 +17,8 @@ from src.ui.transcoder_panel import TranscoderPanel
 from src.ui.converter_panel import ConverterPanel
 from src.ui.queue_panel import QueuePanel
 from src.ui.settings_dialog import SettingsDialog
+from src.core.history_service import HistoryService
+from src.ui.menus import MenuFactory
 
 
 class NavButton(QPushButton):
@@ -60,10 +62,8 @@ class MainWindow(QMainWindow):
         saved_theme = self._settings.value("theme", "dark")
         self._set_theme(saved_theme)
         
-        self._navigate(self.PAGE_PLAYER)
-        self._history_stack = []
-        self._forward_stack = []
-        self._current_media = None
+        self._history = HistoryService(max_recent=self.MAX_RECENT)
+        self._history.history_updated.connect(self._update_recent_menu)
 
 
     def _setup_ui(self):
@@ -79,10 +79,6 @@ class MainWindow(QMainWindow):
         # ─── Titlebar ───────────────────────────────────────
         self.titlebar = TitleBar()
         self.root_layout.addWidget(self.titlebar)
-
-        # ─── Menu Bar ───────────────────────────────────────
-        self.menubar = self._create_menubar()
-        self.root_layout.addWidget(self.menubar)
 
         # ─── Content pages (stacked) ────────────────────────
         self.stack = QStackedWidget()
@@ -103,6 +99,17 @@ class MainWindow(QMainWindow):
         # Share playlist model with Library Panel
         self.library_page.set_playlist_model(self.player_page.playlist_model)
 
+        # ─── Menu Bar ───────────────────────────────────────
+        self.menu_factory = MenuFactory(self)
+        self.menubar = self.menu_factory.create_menubar()
+        # Add menubar to layout below titlebar (not using setMenuBar to avoid overlapping titlebar)
+        self.root_layout.addWidget(self.menubar)
+        
+        # Initialize StatusBar
+        self.statusbar = self.statusBar()
+        self.statusbar.showMessage("Ready")
+        
+        # Add stack to layout
         self.root_layout.addWidget(self.stack, 1)
 
         # Start Renderer Discovery
@@ -124,279 +131,6 @@ class MainWindow(QMainWindow):
         else:
             print(f"Theme file not found: {theme_file}")
 
-    def _create_menubar(self) -> QMenuBar:
-        """Build VLC-style menu bar."""
-        menubar = QMenuBar()
-        menubar.setObjectName("appMenuBar")
-        menubar.setFixedHeight(24)
-
-        # ─── Media ──────────────────────────────────────────
-        media_menu = menubar.addMenu("&Media")
-
-        self.act_open_file = media_menu.addAction("Open File...")
-        self.act_open_file.setShortcut(QKeySequence("Ctrl+O"))
-
-        self.act_open_multiple = media_menu.addAction("Open Multiple Files...")
-        self.act_open_multiple.setShortcut(QKeySequence("Ctrl+Shift+O"))
-
-        self.act_open_folder = media_menu.addAction("Open Folder...")
-        self.act_open_folder.setShortcut(QKeySequence("Ctrl+F"))
-
-        self.act_open_disc = media_menu.addAction("Open Disc...")
-        self.act_open_disc.setShortcut(QKeySequence("Ctrl+D"))
-
-        self.act_open_network = media_menu.addAction("Open Network Stream...")
-        self.act_open_network.setShortcut(QKeySequence("Ctrl+N"))
-
-        self.act_open_capture = media_menu.addAction("Open Capture Device...")
-        self.act_open_capture.setShortcut(QKeySequence("Ctrl+C"))
-
-        self.act_open_clipboard = media_menu.addAction("Open Location from clipboard")
-        self.act_open_clipboard.setShortcut(QKeySequence("Ctrl+V"))
-
-        self.act_recent_menu = media_menu.addMenu("Open Recent Media")
-
-        media_menu.addSeparator()
-
-        self.act_save_playlist = media_menu.addAction("Save Playlist to File...")
-        self.act_save_playlist.setShortcut(QKeySequence("Ctrl+Y"))
-
-        self.act_convert = media_menu.addAction("Convert / Save...")
-        self.act_convert.setShortcut(QKeySequence("Ctrl+R"))
-
-        self.act_stream = media_menu.addAction("Stream...")
-        self.act_stream.setShortcut(QKeySequence("Ctrl+S"))
-
-        media_menu.addSeparator()
-
-        self.act_clear_playlist = media_menu.addAction("Clear Playlist")
-        self.act_clear_playlist.setShortcut(QKeySequence("Ctrl+W"))
-
-        media_menu.addSeparator()
-
-        self.act_quit_end = media_menu.addAction("Quit at the end of playlist")
-        self.act_quit_end.setCheckable(True)
-
-        self.act_quit = media_menu.addAction("Quit")
-        self.act_quit.setShortcut(QKeySequence("Ctrl+Q"))
-
-        # ─── Playback ───────────────────────────────────────
-        # ─── Playback ───────────────────────────────────────
-        playback_menu = menubar.addMenu("P&layback")
-
-
-        playback_menu.addMenu("Title")
-        playback_menu.addMenu("Chapter")
-        playback_menu.addMenu("Program")
-        self.act_bookmarks = playback_menu.addAction("Bookmarks")
-        self.act_bookmarks.setShortcut(QKeySequence("Ctrl+B"))
-        playback_menu.addMenu("Custom Bookmarks")
-
-        self.renderer_menu = playback_menu.addMenu("Renderer")
-        self.renderer_menu.aboutToShow.connect(self._populate_renderers)
-
-
-        speed_menu = playback_menu.addMenu("Speed")
-        self.act_speed_faster = speed_menu.addAction("Faster")
-        self.act_speed_faster.setShortcut(QKeySequence("]"))
-        self.act_speed_normal = speed_menu.addAction("Normal")
-        self.act_speed_normal.setShortcut(QKeySequence("="))
-        self.act_speed_slower = speed_menu.addAction("Slower")
-        self.act_speed_slower.setShortcut(QKeySequence("["))
-
-        playback_menu.addSeparator()
-
-        self.act_jump_fwd = playback_menu.addAction("Jump Forward")
-        self.act_jump_fwd.setShortcut(QKeySequence("Right"))
-
-        self.act_jump_back = playback_menu.addAction("Jump Backward")
-        self.act_jump_back.setShortcut(QKeySequence("Left"))
-
-        self.act_jump_time = playback_menu.addAction("Jump to Specific Time")
-        self.act_jump_time.setShortcut(QKeySequence("Ctrl+T"))
-
-        playback_menu.addSeparator()
-
-        self.act_play_pause = playback_menu.addAction("Play")
-        self.act_play_pause.setShortcut(QKeySequence("Space"))
-
-        self.act_stop = playback_menu.addAction("Stop")
-        self.act_stop.setShortcut(QKeySequence("S"))
-
-        self.act_prev = playback_menu.addAction("Previous")
-        self.act_prev.setShortcut(QKeySequence("P"))
-
-        self.act_next = playback_menu.addAction("Next")
-        self.act_next.setShortcut(QKeySequence("N"))
-
-        self.act_record = playback_menu.addAction("Record")
-
-        # ─── Audio ──────────────────────────────────────────
-        audio_menu = menubar.addMenu("&Audio")
-
-        self.act_mute = audio_menu.addAction("Mute")
-        self.act_mute.setShortcut(QKeySequence("M"))
-
-        self.act_vol_up = audio_menu.addAction("Volume Up")
-        self.act_vol_up.setShortcut(QKeySequence("Ctrl+Up"))
-
-        self.act_vol_down = audio_menu.addAction("Volume Down")
-        self.act_vol_down.setShortcut(QKeySequence("Ctrl+Down"))
-
-        audio_menu.addSeparator()
-        self.audio_track_menu = audio_menu.addMenu("Audio Track")
-        self.audio_track_menu.aboutToShow.connect(self._populate_audio_tracks)
-
-        self.audio_device_menu = audio_menu.addMenu("Audio Device")
-        self.audio_device_menu.aboutToShow.connect(self._populate_audio_devices)
-
-        self.stereo_mode_menu = audio_menu.addMenu("Stereo Mode")
-        self.stereo_mode_menu.aboutToShow.connect(self._populate_stereo_mode)
-
-        self.vis_menu = audio_menu.addMenu("Visualizations")
-        self.vis_menu.aboutToShow.connect(self._populate_visualizations)
-
-        # ─── Video ──────────────────────────────────────────
-        video_menu = menubar.addMenu("&Video")
-
-        self.act_fullscreen = video_menu.addAction("Fullscreen")
-        self.act_fullscreen.setShortcut(QKeySequence("F"))
-
-        video_menu.addSeparator()
-
-        self.subtitle_track_menu = video_menu.addMenu("Subtitle Track")
-        self.subtitle_track_menu.aboutToShow.connect(self._populate_subtitle_tracks)
-
-        video_menu.addSeparator()
-
-        ar_menu = video_menu.addMenu("Aspect Ratio")
-        for ratio in ["16:9", "4:3", "1:1", "16:10", "2.21:1", "2.35:1", "2.39:1", "5:4"]:
-            ar_menu.addAction(ratio, lambda r=ratio: self.player_page.vlc.set_aspect_ratio(r))
-        ar_menu.addSeparator()
-        ar_menu.addAction("Default", lambda: self.player_page.vlc.set_aspect_ratio(None))
-
-        crop_menu = video_menu.addMenu("Crop")
-        for ratio in ["16:9", "4:3", "1:1", "16:10", "2.21:1", "2.35:1", "2.39:1", "5:4"]:
-            crop_menu.addAction(ratio, lambda r=ratio: self.player_page.vlc.set_crop(r))
-        crop_menu.addSeparator()
-        crop_menu.addAction("Default", lambda: self.player_page.vlc.set_crop(None))
-
-        self.act_screenshot = video_menu.addAction("Take Snapshot")
-        self.act_screenshot.setShortcut(QKeySequence("Shift+S"))
-
-        # ─── Tools ──────────────────────────────────────────
-        tools_menu = menubar.addMenu("Tool&s")
-
-        
-        self.act_effects = tools_menu.addAction("Effects and Filters")
-        self.act_effects.setShortcut(QKeySequence("Ctrl+E"))
-        self.act_effects.triggered.connect(lambda: self._open_effects_dialog(0))
-        
-        self.act_vlm = tools_menu.addAction("VLM Configurator")
-        self.act_vlm.setShortcut(QKeySequence("Ctrl+Shift+W"))
-        self.act_vlm.triggered.connect(self._show_vlm_config)
-
-        self.act_sync = tools_menu.addAction("Track Synchronization")
-
-        self.act_sync.triggered.connect(lambda: self._open_effects_dialog(2))
-
-        tools_menu.addSeparator()
-
-        self.act_tool_transcoder = tools_menu.addAction("Transcoder")
-        self.act_tool_transcoder.triggered.connect(lambda: self._navigate(self.PAGE_TRANSCODER))
-
-        self.act_tool_converter = tools_menu.addAction("Converter")
-        self.act_tool_converter.triggered.connect(lambda: self._navigate(self.PAGE_CONVERTER))
-
-        tools_menu.addSeparator()
-
-        self.act_media_info = tools_menu.addAction("Media Information")
-        self.act_media_info.setShortcut(QKeySequence("Ctrl+I"))
-        
-        self.act_codec_info = tools_menu.addAction("Codec Information")
-        self.act_codec_info.setShortcut(QKeySequence("Ctrl+J"))
-
-        self.act_messages = tools_menu.addAction("Messages")
-        self.act_messages.setShortcut(QKeySequence("Ctrl+M"))
-
-        tools_menu.addSeparator()
-
-
-        self.act_preferences = tools_menu.addAction("Preferences")
-        self.act_preferences.setShortcut(QKeySequence("Ctrl+P"))
-
-
-
-        # ─── View ───────────────────────────────────────────
-        view_menu = menubar.addMenu("V&iew")
-
-
-        self.act_view_playlist = view_menu.addAction("Playlist")
-        self.act_view_playlist.setShortcut(QKeySequence("Ctrl+L"))
-        self.act_view_playlist.triggered.connect(self._toggle_playlist_view)
-
-        self.act_docked_playlist = view_menu.addAction("Docked Playlist")
-        self.act_docked_playlist.setCheckable(True)
-        self.act_docked_playlist.setChecked(True) # Placeholder state
-        
-        playlist_view_mode = view_menu.addMenu("Playlist View Mode")
-        playlist_view_mode.addAction("Icons", lambda: self.library_page.set_view_mode(self.library_page.VIEW_ICONS))
-        playlist_view_mode.addAction("Detailed List", lambda: self.library_page.set_view_mode(self.library_page.VIEW_DETAILS))
-        playlist_view_mode.addAction("List", lambda: self.library_page.set_view_mode(self.library_page.VIEW_LIST))
-
-        view_menu.addSeparator()
-
-        self.act_always_on_top = view_menu.addAction("Always on top")
-        self.act_always_on_top.setCheckable(True)
-        self.act_always_on_top.triggered.connect(self._toggle_always_on_top)
-
-        self.act_minimal_interface = view_menu.addAction("Minimal Interface")
-        self.act_minimal_interface.setShortcut(QKeySequence("Ctrl+H"))
-        self.act_minimal_interface.setCheckable(True)
-        self.act_minimal_interface.triggered.connect(self._toggle_minimal_interface)
-
-        self.act_fullscreen_interface = view_menu.addAction("Fullscreen Interface")
-        self.act_fullscreen_interface.setShortcut(QKeySequence("F11"))
-        self.act_fullscreen_interface.triggered.connect(self.toggle_video_fullscreen)
-
-        view_menu.addSeparator()
-
-        self.act_advanced_controls = view_menu.addAction("Advanced Controls")
-        self.act_advanced_controls.setShortcut(QKeySequence("Ctrl+A"))
-        self.act_advanced_controls.setCheckable(True)
-
-        self.act_advanced_controls.triggered.connect(self._toggle_advanced_controls)
-        
-        self.act_status_bar = view_menu.addAction("Status Bar")
-        self.act_status_bar.setCheckable(True)
-        self.act_status_bar.setChecked(True)
-        self.act_status_bar.triggered.connect(self._toggle_status_bar)
-
-        view_menu.addSeparator()
-
-        iface_menu = view_menu.addMenu("Add Interface")
-        iface_menu.addAction("Web Interface")
-        iface_menu.addAction("Telnet Interface")
-        iface_menu.addAction("Console Interface")
-        iface_menu.addAction("Mouse Gestures")
-
-        view_menu.addAction("VLsub")
-
-        # ─── Help ───────────────────────────────────────────
-        help_menu = menubar.addMenu("&Help")
-        
-        self.act_shortcuts = help_menu.addAction("Keyboard Shortcuts")
-        self.act_shortcuts.setShortcut(QKeySequence("Shift+F1"))
-
-
-        self.act_about = help_menu.addAction("About Omneva")
-        self.act_check_updates = help_menu.addAction("Check for Updates...")
-
-        # Initialize StatusBar
-        self.statusbar = self.statusBar()
-        self.statusbar.showMessage("Ready")
-
-        return menubar
 
     def _connect_signals(self):
         """Wire up all signals."""
@@ -440,8 +174,10 @@ class MainWindow(QMainWindow):
 
         self.act_play_pause.triggered.connect(self.player_page._toggle_play)
         self.act_stop.triggered.connect(self.player_page.vlc.stop)
-        self.act_prev.triggered.connect(self.player_page.vlc.previous_chapter)
-        self.act_next.triggered.connect(self.player_page.vlc.next_chapter)
+        self.act_prev.triggered.connect(self.player_page._play_prev)
+        self.act_next.triggered.connect(self.player_page._play_next)
+        self.act_restart.triggered.connect(self.player_page.vlc.restart)
+        self.act_cycle_loop.triggered.connect(self.player_page.vlc.cycle_loop_mode)
         self.act_record.triggered.connect(self.player_page.vlc.toggle_record)
 
         self.act_speed_faster.triggered.connect(lambda: self.player_page._set_speed(round(self.player_page.vlc.get_rate() + 0.05, 2)))
@@ -456,12 +192,23 @@ class MainWindow(QMainWindow):
         self.act_vol_up.triggered.connect(self.player_page.vlc.volume_up)
         self.act_vol_down.triggered.connect(self.player_page.vlc.volume_down)
 
+        self.act_audio_delay_down.triggered.connect(lambda: self.player_page.vlc.change_audio_delay(-50))
+        self.act_audio_delay_up.triggered.connect(lambda: self.player_page.vlc.change_audio_delay(50))
+        self.act_cycle_audio.triggered.connect(self.player_page.vlc.cycle_audio_track)
+
         self.act_fullscreen.triggered.connect(self.toggle_video_fullscreen)
         self.act_screenshot.triggered.connect(self._take_snapshot)
+        self.act_cycle_aspect.triggered.connect(self.player_page.vlc.cycle_aspect_ratio)
+        self.act_cycle_sub.triggered.connect(self.player_page.vlc.cycle_subtitle_track)
+        self.act_sub_delay_down.triggered.connect(lambda: self.player_page.vlc.change_subtitle_delay(-50))
+        self.act_sub_delay_up.triggered.connect(lambda: self.player_page.vlc.change_subtitle_delay(50))
+        self.act_cycle_crop.triggered.connect(self.player_page.vlc.cycle_crop)
+        self.act_cycle_zoom.triggered.connect(self.player_page.vlc.cycle_zoom)
 
         self.act_media_info.triggered.connect(self._show_media_info)
         self.act_codec_info.triggered.connect(self._show_codec_info)
         self.act_preferences.triggered.connect(self._show_preferences)
+        self.act_bookmarks.triggered.connect(self._show_bookmarks)
 
         self.act_about.triggered.connect(self._show_about)
         self.act_check_updates.triggered.connect(self._check_updates)
@@ -469,6 +216,18 @@ class MainWindow(QMainWindow):
         self.act_messages.triggered.connect(self._show_messages)
         self.act_effects.triggered.connect(lambda: self._open_effects_dialog(0))
         self.act_sync.triggered.connect(lambda: self._open_effects_dialog(2))
+        self.act_vlm.triggered.connect(self._show_vlm_config)
+
+        self.act_tool_transcoder.triggered.connect(lambda: self._navigate(self.PAGE_TRANSCODER))
+        self.act_tool_converter.triggered.connect(lambda: self._navigate(self.PAGE_CONVERTER))
+
+        self.act_view_playlist.triggered.connect(self._toggle_playlist_view)
+        self.act_always_on_top.triggered.connect(self._toggle_always_on_top)
+        self.act_minimal_interface.triggered.connect(self._toggle_minimal_interface)
+        self.act_fullscreen_interface.triggered.connect(self.toggle_video_fullscreen)
+        self.act_advanced_controls.triggered.connect(self._toggle_advanced_controls)
+        self.act_status_bar.triggered.connect(self._toggle_status_bar)
+        self.act_toggle_autoscale.triggered.connect(self.player_page.vlc.toggle_autoscale)
 
 
         # History shortcuts
@@ -615,41 +374,28 @@ class MainWindow(QMainWindow):
 
     def _play_media(self, file_path: str, push_history: bool = True):
         """Internal helper to play media and track history."""
-        if push_history and self._current_media:
-            self._history_stack.append(self._current_media)
-            self._forward_stack.clear()
-        
-        self._current_media = file_path
+        self._history.add_media(file_path, push_history)
         self._navigate(self.PAGE_PLAYER)
         self.player_page.load_and_play(file_path)
-        self._add_to_recent(file_path)
 
     def _history_back(self):
         """Go back in play history."""
-        if not self._history_stack:
+        media = self._history.go_back()
+        if not media:
             self.player_page._show_info("No more history")
             return
         
-        if self._current_media:
-            self._forward_stack.append(self._current_media)
-        
-        prev_media = self._history_stack.pop()
-        self._current_media = prev_media
-        self.player_page.load_and_play(prev_media)
+        self.player_page.load_and_play(media)
         self.player_page._show_info("History Back")
 
     def _history_forward(self):
         """Go forward in play history."""
-        if not self._forward_stack:
+        media = self._history.go_forward()
+        if not media:
             self.player_page._show_info("No more forward history")
             return
         
-        if self._current_media:
-            self._history_stack.append(self._current_media)
-        
-        next_media = self._forward_stack.pop()
-        self._current_media = next_media
-        self.player_page.load_and_play(next_media)
+        self.player_page.load_and_play(media)
         self.player_page._show_info("History Forward")
 
     def _open_folder(self):
@@ -707,17 +453,13 @@ class MainWindow(QMainWindow):
         self.player_page._show_info("Playlist Cleared")
 
     def _add_to_recent(self, file_path: str):
-        """Add to recent files (SQLite)."""
-        if not file_path or not os.path.exists(file_path):
-            return
-            
-        storage.add_to_history(file_path)
-        self._update_recent_menu()
+        """Add to recent files via discovery/direct call."""
+        self._history.add_media(file_path, push_history=False)
 
     def _update_recent_menu(self):
-        """Rebuild the Recent Media submenu from SQLite."""
+        """Rebuild the Recent Media submenu."""
         self.act_recent_menu.clear()
-        recent = storage.get_history(limit=self.MAX_RECENT)
+        recent = self._history.get_recent()
         
         if not recent:
             self.act_recent_menu.addAction("(No recent files)").setEnabled(False)
@@ -738,8 +480,7 @@ class MainWindow(QMainWindow):
 
     def _clear_recent(self):
         """Clear recent files list."""
-        storage.clear_history()
-        self._update_recent_menu()
+        self._history.clear_recent()
 
     # ─── Dynamic Audio/Subtitle Track Menus ──────────────────
 
@@ -844,9 +585,15 @@ class MainWindow(QMainWindow):
     # ─── Playback Helpers ────────────────────────────────────
     
     def _jump_to_time(self):
-        """Jump to a specific time in seconds."""
-        seconds, ok = QInputDialog.getInt(self, "Jump to Time", "Enter time in seconds:", 0, 0, 360000)
-        if ok:
+        """Jump to a specific time using HH:MM:SS dialog."""
+        from src.ui.tools_dialogs import JumpToTimeDialog
+        
+        curr = self.player_page.vlc.get_position()
+        dur = self.player_page.vlc.get_duration()
+        
+        dlg = JumpToTimeDialog(curr, dur, self)
+        if dlg.exec():
+            seconds = dlg.get_time_seconds()
             self.player_page.vlc.seek(float(seconds))
 
     def _take_snapshot(self):
@@ -1117,6 +864,9 @@ class MainWindow(QMainWindow):
 
         # 6. Tools
         tools_menu = menu.addMenu("Tools")
+        tools_menu.addAction(self.act_effects)
+        tools_menu.addAction(self.act_sync)
+        tools_menu.addSeparator()
         tools_menu.addAction(self.act_media_info)
         tools_menu.addAction(self.act_codec_info)
         tools_menu.addAction(self.act_transcode)
@@ -1243,14 +993,13 @@ class MainWindow(QMainWindow):
         )
         if paths:
             self._navigate(self.PAGE_PLAYER)
-            # Play first, add rest
+            # Play first, add rest to model
             first = paths[0]
             self.player_page.load_and_play(first)
             self._add_to_recent(first)
             
             for p in paths[1:]:
-                self.player_page._playlist_files.append(p)
-                self.player_page.playlist_panel.add_file(p)
+                self.player_page.playlist_model.add_file(p)
 
     def _add_to_recent(self, file_path: str):
         """Add file to recent list in QSettings and update menu."""
@@ -1376,10 +1125,11 @@ class MainWindow(QMainWindow):
     # ─── Tools Dialogs ──────────────────────────────────────
 
     def _open_effects_dialog(self, tab_index=0):
+        """Standardized method to open Effects and Filters dialog."""
         from src.ui.tools_dialogs import EffectsAndFiltersDialog
         
         if not hasattr(self, 'effects_dlg') or self.effects_dlg is None:
-             self.effects_dlg = EffectsAndFiltersDialog(self.player_page.vlc, self)
+            self.effects_dlg = EffectsAndFiltersDialog(self.player_page.vlc, self)
              
         try:
             self.effects_dlg.tabs.setCurrentIndex(tab_index if isinstance(tab_index, int) else 0)
@@ -1393,13 +1143,12 @@ class MainWindow(QMainWindow):
 
     def _show_media_info(self):
         """Show Media Information Dialog (General tab)."""
-        from src.ui.tools_dialogs import MediaInfoDialog
-        
         if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
             self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
         
         try:
             self.media_info_dlg.tabs.setCurrentIndex(0)
+            self.media_info_dlg.refresh_current_tab()
             self.media_info_dlg.show()
             self.media_info_dlg.raise_()
             self.media_info_dlg.activateWindow()
@@ -1409,10 +1158,20 @@ class MainWindow(QMainWindow):
 
     def _show_codec_info(self):
         """Show Media Information Dialog (Codec tab)."""
-        self._open_effects_dialog(2) # Fallback if dedicated dialog isn't ready
-        # Actually, MediaInfoDialog has a codec tab at index 2.
-        self._show_media_info()
-        self.media_info_dlg.tabs.setCurrentIndex(2)
+        from src.ui.tools_dialogs import MediaInfoDialog
+        
+        if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
+            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=2)
+            
+        try:
+            self.media_info_dlg.tabs.setCurrentIndex(2)
+            self.media_info_dlg.refresh_current_tab()
+            self.media_info_dlg.show()
+            self.media_info_dlg.raise_()
+            self.media_info_dlg.activateWindow()
+        except RuntimeError:
+            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=2)
+            self.media_info_dlg.show()
 
     def _show_about(self):
         from src.ui.tools_dialogs import AboutDialog
@@ -1420,18 +1179,20 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _show_preferences(self):
-        self._on_settings_clicked()
+        """Show the enhanced Preferences dialog (6 tabs)."""
+        from src.ui.tools_dialogs import PreferencesDialog
+        dlg = PreferencesDialog(self)
+        dlg.exec()
+
+    def _show_bookmarks(self):
+        """Show Custom Bookmarks dialog."""
+        from src.ui.tools_dialogs import BookmarksDialog
+        dlg = BookmarksDialog(self)
+        dlg.exec()
 
     def _check_updates(self):
         from PySide6.QtWidgets import QMessageBox
         QMessageBox.information(self, "Check for Updates", "You are using the latest version of Omneva.")
-
-    def _open_effects_dialog(self, initial_tab=0):
-        """Open the Video Effects and Synchronization dialog."""
-        from src.ui.tools_dialogs import VideoEffectsDialog
-        dlg = VideoEffectsDialog(self.player_page.vlc, self)
-        dlg.tabs.setCurrentIndex(initial_tab)
-        dlg.show() # Non-modal so user can see effects live
 
     def _populate_renderers(self):
         """Dynamically list discovered renderers in the menu."""

@@ -10,215 +10,64 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt, QTimer
 import vlc
+from src.ui.dialogs.sync_widget import SyncWidget
+from src.ui.dialogs.video_essential_widget import VideoEssentialWidget
+from src.ui.dialogs.video_crop_widget import VideoCropWidget
+from src.ui.dialogs.video_overlay_widget import VideoOverlayWidget
+from src.ui.dialogs.video_advanced_widget import VideoAdvancedWidget
+from src.ui.dialogs.equalizer_widget import EqualizerWidget
+from src.ui.dialogs.audio_widgets import CompressorWidget, SpatializerWidget, StereoWidenerWidget
 
-class SyncWidget(QWidget):
-    """Audio and Subtitle Synchronization Widget."""
-    
-    def __init__(self, vlc_engine, parent=None):
+
+
+
+
+
+
+class JumpToTimeDialog(QDialog):
+    """VLC-style Jump to Specific Time dialog (HH:MM:SS)."""
+    def __init__(self, current_time_s: float, duration_s: float, parent=None):
         super().__init__(parent)
-        self.vlc = vlc_engine
+        self.setWindowTitle("Jump to Time")
+        self.setFixedSize(280, 160)
         
         layout = QVBoxLayout(self)
         
-        # Audio Sync
-        gb_audio = QGroupBox("Audio Track Synchronization")
-        l_audio = QGridLayout(gb_audio)
+        form = QFormLayout()
+        self.h_spin = QSpinBox()
+        self.m_spin = QSpinBox()
+        self.s_spin = QSpinBox()
         
-        self.sb_audio = QDoubleSpinBox()
-        self.sb_audio.setRange(-100.0, 100.0) # Seconds
-        self.sb_audio.setSingleStep(0.1)
-        self.sb_audio.setSuffix(" s")
-        self.sb_audio.setDecimals(3)
-        self.sb_audio.setValue(self.vlc.get_audio_delay() / 1000.0)
-        self.sb_audio.valueChanged.connect(self._update_audio)
-        
-        l_audio.addWidget(QLabel("Audio delay:"), 0, 0)
-        l_audio.addWidget(self.sb_audio, 0, 1)
-        l_audio.addWidget(QLabel("(Positive values delay audio)"), 0, 2)
-        
-        layout.addWidget(gb_audio)
-        
-        # Subtitle Sync
-        gb_sub = QGroupBox("Subtitle Track Synchronization")
-        l_sub = QGridLayout(gb_sub)
-        
-        self.sb_sub = QDoubleSpinBox()
-        self.sb_sub.setRange(-100.0, 100.0)
-        self.sb_sub.setSingleStep(0.1)
-        self.sb_sub.setSuffix(" s")
-        self.sb_sub.setDecimals(3)
-        self.sb_sub.setValue(self.vlc.get_subtitle_delay() / 1000.0)
-        self.sb_sub.valueChanged.connect(self._update_sub)
-        
-        l_sub.addWidget(QLabel("Subtitle delay:"), 0, 0)
-        l_sub.addWidget(self.sb_sub, 0, 1)
-        l_sub.addWidget(QLabel("(Positive values delay subtitles)"), 0, 2)
-        
-        # Subtitle Speed
-        self.sb_sub_fps = QDoubleSpinBox()
-        self.sb_sub_fps.setRange(0.01, 240.0)
-        self.sb_sub_fps.setSingleStep(1.0)
-        self.sb_sub_fps.setValue(1.0) # Default
-        self.sb_sub_fps.setSuffix(" fps")
-        self.sb_sub_fps.setDecimals(3)
-        self.sb_sub_fps.valueChanged.connect(self.vlc.set_subtitle_fps)
-        
-        l_sub.addWidget(QLabel("Subtitle speed:"), 1, 0)
-        l_sub.addWidget(self.sb_sub_fps, 1, 1)
-        
-        # Duration Factor
-        self.sb_sub_dur = QDoubleSpinBox()
-        self.sb_sub_dur.setRange(0.1, 20.0)
-        self.sb_sub_dur.setSingleStep(0.1)
-        self.sb_sub_dur.setValue(1.0)
-        self.sb_sub_dur.setDecimals(3)
-        self.sb_sub_dur.valueChanged.connect(self.vlc.set_subtitle_duration_factor)
-        
-        l_sub.addWidget(QLabel("Subtitle duration factor:"), 2, 0)
-        l_sub.addWidget(self.sb_sub_dur, 2, 1)
-        
-        layout.addWidget(gb_sub)
-        
-        # Reset
-        # Reset
-        btn_reset = QPushButton("Reset Synchronization")
-        btn_reset.clicked.connect(self._reset)
-        layout.addWidget(btn_reset)
-        
-        layout.addStretch()
-        
-    def _update_audio(self, val):
-        # API expects ms
-        self.vlc.set_audio_delay(int(val * 1000))
-        
-    def _update_sub(self, val):
-        self.vlc.set_subtitle_delay(int(val * 1000))
-        
-    def _reset(self):
-        self.sb_audio.setValue(0.0)
-        self.sb_sub.setValue(0.0)
-
-
-class VideoEssentialWidget(QWidget):
-    """Essential Video Effects (Image Adjust, Sharpen, etc.)."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QHBoxLayout(self)
-        
-        # Left: Image Adjust
-        gb_adjust = QGroupBox("Image adjust")
-        gb_adjust.setCheckable(True)
-        gb_adjust.setChecked(False)
-        gb_adjust.toggled.connect(self.vlc.enable_video_adjust)
-        
-        grid_adjust = QGridLayout(gb_adjust)
-        
-        # Video Adjust Options (hardcoded)
-        # Enable=0, Contrast=1, Brightness=2, Hue=3, Saturation=4, Gamma=5
-        _OPT_HUE = 3
-        _OPT_BRIGHTNESS = 2
-        _OPT_CONTRAST = 1
-        _OPT_SATURATION = 4
-        _OPT_GAMMA = 5
-        
-        self.adjust_controls = [
-            ("Hue", _OPT_HUE, 0, 360, 0, 1.0, True),
-            ("Brightness", _OPT_BRIGHTNESS, 0, 200, 100, 0.01, False),
-            ("Contrast", _OPT_CONTRAST, 0, 200, 100, 0.01, False),
-            ("Saturation", _OPT_SATURATION, 0, 300, 100, 0.01, False),
-            ("Gamma", _OPT_GAMMA, 1, 1000, 100, 0.01, False),
-        ]
-        
-        self.sliders = {}
-        for i, (name, opt, min_v, max_v, def_v, scale, is_int) in enumerate(self.adjust_controls):
-            lbl = QLabel(name)
-            slider = QSlider(Qt.Horizontal)
-            slider.setRange(min_v, max_v)
-            slider.setValue(def_v)
-            slider.valueChanged.connect(lambda v, o=opt, s=scale, is_i=is_int: self._update_val(o, v, s, is_i))
-            grid_adjust.addWidget(lbl, i, 0)
-            grid_adjust.addWidget(slider, i, 1)
-            self.sliders[name] = slider
-
-        layout.addWidget(gb_adjust)
-        
-        # Right: Filters (Sharpen, Banding, Grain)
-        vbox_right = QVBoxLayout()
-        
-        # Sharpen
-        gb_sharpen = QGroupBox("Sharpen")
-        gb_sharpen.setCheckable(True)
-        gb_sharpen.setChecked(False)
-        l_sharpen = QVBoxLayout(gb_sharpen)
-        s_sharpen = QSlider(Qt.Horizontal)
-        s_sharpen.setRange(0, 500) # 0.0 to 5.0
-        s_sharpen.valueChanged.connect(lambda v: self.vlc.set_filter_sharpen(gb_sharpen.isChecked(), v/100.0))
-        gb_sharpen.toggled.connect(lambda c: self.vlc.set_filter_sharpen(c, s_sharpen.value()/100.0))
-        l_sharpen.addWidget(QLabel("Sigma"))
-        l_sharpen.addWidget(s_sharpen)
-        vbox_right.addWidget(gb_sharpen)
-        
-        # Banding (Stub)
-        gb_banding = QGroupBox("Banding removal")
-        gb_banding.setCheckable(True)
-        gb_banding.setChecked(False)
-        vbox_right.addWidget(gb_banding)
-
-        # Grain (Stub)
-        gb_grain = QGroupBox("Film Grain")
-        gb_grain.setCheckable(True)
-        gb_grain.setChecked(False)
-        vbox_right.addWidget(gb_grain)
-        
-        vbox_right.addStretch()
-        layout.addLayout(vbox_right)
-
-    def _update_val(self, option, value, scale, is_int):
-        if is_int:
-            self.vlc.set_adjust_int(option, int(value * scale))
-        else:
-            self.vlc.set_adjust_float(option, value * scale)
-
-
-class VideoCropWidget(QWidget):
-    """Video Crop Settings."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QGridLayout(self)
-        
-        self.spin_top = QSpinBox()
-        self.spin_bot = QSpinBox()
-        self.spin_left = QSpinBox()
-        self.spin_right = QSpinBox()
-        
-        for s in [self.spin_top, self.spin_bot, self.spin_left, self.spin_right]:
-            s.setRange(0, 9999)
-            s.setSuffix(" px")
-            s.valueChanged.connect(self._update_crop)
+        for s in [self.h_spin, self.m_spin, self.s_spin]:
+            s.setRange(0, 59)
+            s.setFixedWidth(60)
             
-        layout.addWidget(QLabel("Top"), 0, 1, Qt.AlignHCenter)
-        layout.addWidget(self.spin_top, 1, 1)
+        self.h_spin.setRange(0, 99) # Allow many hours
         
-        layout.addWidget(QLabel("Left"), 2, 0, Qt.AlignHCenter)
-        layout.addWidget(self.spin_left, 3, 0)
+        # Initial values
+        h = int(current_time_s // 3600)
+        m = int((current_time_s % 3600) // 60)
+        s = int(current_time_s % 60)
         
-        layout.addWidget(QLabel("Right"), 2, 2, Qt.AlignHCenter)
-        layout.addWidget(self.spin_right, 3, 2)
+        self.h_spin.setValue(h)
+        self.m_spin.setValue(m)
+        self.s_spin.setValue(s)
         
-        layout.addWidget(QLabel("Bottom"), 4, 1, Qt.AlignHCenter)
-        layout.addWidget(self.spin_bot, 5, 1)
+        form.addRow("Hours:", self.h_spin)
+        form.addRow("Minutes:", self.m_spin)
+        form.addRow("Seconds:", self.s_spin)
+        layout.addLayout(form)
         
-        layout.setRowStretch(6, 1)
-
-    def _update_crop(self):
-        self.vlc.set_crop(
-            top=self.spin_top.value(),
-            left=self.spin_left.value(),
-            bottom=self.spin_bot.value(),
-            right=self.spin_right.value()
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self
         )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+    def get_time_seconds(self) -> float:
+        return self.h_spin.value() * 3600 + self.m_spin.value() * 60 + self.s_spin.value()
 
 
 class VideoColorsWidget(QWidget):
@@ -252,187 +101,17 @@ class VideoGeometryWidget(QWidget):
         layout.setRowStretch(3, 1)
 
 
-class VideoOverlayWidget(QWidget):
-    """Video Overlay Settings (Logo, Text)."""
+class VideoAtmolightWidget(QWidget):
+    """Video Atmolight Settings (Stub)."""
     def __init__(self, vlc, parent=None):
         super().__init__(parent)
-        self.vlc = vlc
-        layout = QHBoxLayout(self)
-        
-        # Logo
-        gb_logo = QGroupBox("Add logo")
-        gb_logo.setCheckable(True)
-        gb_logo.setChecked(False)
-        gb_logo.toggled.connect(self._update_logo)
-        l_logo = QGridLayout(gb_logo)
-        
-        from PySide6.QtWidgets import QLineEdit, QFileDialog
-        
-        self.txt_logo_path = QLineEdit()
-        btn_browse = QPushButton("...")
-        btn_browse.clicked.connect(self._browse_logo)
-        
-        self.spin_logo_top = QSpinBox()
-        self.spin_logo_left = QSpinBox()
-        self.slider_logo_opacity = QSlider(Qt.Horizontal)
-        self.slider_logo_opacity.setRange(0, 255)
-        self.slider_logo_opacity.setValue(255)
-        
-        for w in [self.spin_logo_top, self.spin_logo_left, self.slider_logo_opacity]:
-             w.valueChanged.connect(self._update_logo)
-
-        l_logo.addWidget(QLabel("Logo"), 0, 0)
-        l_logo.addWidget(self.txt_logo_path, 0, 1)
-        l_logo.addWidget(btn_browse, 0, 2)
-        
-        l_logo.addWidget(QLabel("Top"), 1, 0)
-        l_logo.addWidget(self.spin_logo_top, 1, 1)
-        l_logo.addWidget(QLabel("Left"), 2, 0)
-        l_logo.addWidget(self.spin_logo_left, 2, 1)
-        l_logo.addWidget(QLabel("Opacity"), 3, 0)
-        l_logo.addWidget(self.slider_logo_opacity, 3, 1, 1, 2)
-        
-        layout.addWidget(gb_logo)
-        
-        # Text
-        gb_text = QGroupBox("Add text")
-        gb_text.setCheckable(True)
-        gb_text.setChecked(False)
-        gb_text.toggled.connect(self._update_text)
-        l_text = QGridLayout(gb_text)
-        
-        self.txt_input = QLineEdit("VLC")
-        self.txt_input.textChanged.connect(self._update_text)
-        
-        self.combo_pos = QComboBox()
-        # 0=Center, 1=Left, 2=Right, 4=Top, 8=Bottom
-        self.combo_pos.addItem("Center", 0)
-        self.combo_pos.addItem("Top-Left", 5) # 4+1
-        self.combo_pos.addItem("Top-Right", 6) # 4+2
-        self.combo_pos.addItem("Bottom-Left", 9) # 8+1
-        self.combo_pos.addItem("Bottom-Right", 10) # 8+2
-        self.combo_pos.currentIndexChanged.connect(self._update_text)
-        
-        l_text.addWidget(QLabel("Text"), 0, 0)
-        l_text.addWidget(self.txt_input, 0, 1)
-        l_text.addWidget(QLabel("Position"), 1, 0)
-        l_text.addWidget(self.combo_pos, 1, 1)
-        
-        layout.addWidget(gb_text)
-        
-    def _browse_logo(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Select Logo", filter="Images (*.png *.jpg *.jpeg)")
-        if f:
-            self.txt_logo_path.setText(f)
-            self._update_logo()
-            
-    def _update_logo(self):
-        if self.findChild(QGroupBox, "Add logo").isChecked(): # simplified check
-             self.vlc.set_logo(
-                 self.txt_logo_path.text(),
-                 self.slider_logo_opacity.value(),
-                 self.spin_logo_left.value(),
-                 self.spin_logo_top.value()
-             )
-        else:
-             self.vlc.set_logo(None)
-
-    def _update_text(self):
-        if self.findChild(QGroupBox, "Add text").isChecked():
-             self.vlc.set_marquee(
-                 self.txt_input.text(),
-                 self.combo_pos.currentData()
-             )
-        else:
-             self.vlc.set_marquee(None)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Atmolight settings are not yet available."))
+        layout.addStretch()
 
 
-class VideoAdvancedWidget(QWidget):
-    """Advanced Video Effects (Blur, Clone, Denoiser, etc.)."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QHBoxLayout(self)
-        
-        # Left Column: Anti-Flicker, Motion Blur, Spatial Blur, Clone
-        vbox_left = QVBoxLayout()
-        
-        # Anti-Flickering
-        gb_af = QGroupBox("Anti-Flickering")
-        gb_af.setCheckable(True)
-        gb_af.setChecked(False)
-        l_af = QHBoxLayout(gb_af)
-        s_af = QSlider(Qt.Horizontal)
-        s_af.setRange(0, 100)
-        l_af.addWidget(QLabel("Soften"))
-        l_af.addWidget(s_af)
-        vbox_left.addWidget(gb_af)
-        
-        # Motion Blur
-        gb_mb = QGroupBox("Motion blur")
-        gb_mb.setCheckable(True)
-        gb_mb.setChecked(False)
-        l_mb = QHBoxLayout(gb_mb)
-        s_mb = QSlider(Qt.Horizontal)
-        s_mb.setRange(1, 127)
-        l_mb.addWidget(QLabel("Factor"))
-        l_mb.addWidget(s_mb)
-        vbox_left.addWidget(gb_mb)
-        
-        # Spatial Blur
-        gb_sb = QGroupBox("Spatial blur")
-        gb_sb.setCheckable(True)
-        gb_sb.setChecked(False)
-        l_sb = QHBoxLayout(gb_sb)
-        s_sb = QSlider(Qt.Horizontal)
-        s_sb.setRange(0, 50)
-        l_sb.addWidget(QLabel("Sigma"))
-        l_sb.addWidget(s_sb)
-        vbox_left.addWidget(gb_sb)
 
-        # Clone
-        gb_clone = QGroupBox("Clone")
-        gb_clone.setCheckable(True)
-        gb_clone.setChecked(False)
-        l_clone = QHBoxLayout(gb_clone)
-        sp_clone = QSpinBox()
-        sp_clone.setRange(1, 100)
-        sp_clone.setValue(2)
-        l_clone.addWidget(QLabel("Number of clones"))
-        l_clone.addWidget(sp_clone)
-        vbox_left.addWidget(gb_clone)
-        
-        vbox_left.addStretch()
-        layout.addLayout(vbox_left)
-        
-        # Right Column: Denoiser and Checkbox list
-        vbox_right = QVBoxLayout()
-        
-        # Denoiser
-        gb_dn = QGroupBox("Denoiser")
-        gb_dn.setCheckable(True)
-        gb_dn.setChecked(False)
-        l_dn = QGridLayout(gb_dn)
-        
-        dn_controls = ["Spatial luma strength", "Temporal luma strength", 
-                       "Spatial chroma strength", "Temporal chroma strength"]
-        for i, name in enumerate(dn_controls):
-            l_dn.addWidget(QLabel(name), i, 0)
-            sl = QSlider(Qt.Horizontal)
-            l_dn.addWidget(sl, i, 1)
-            
-        vbox_right.addWidget(gb_dn)
-        
-        # Checkboxes
-        checks = [
-            "Anaglyph 3D", "Mirror", "Psychedelic", 
-            "Waves", "Water effect", "Motion detect"
-        ]
-        for name in checks:
-            vbox_right.addWidget(QCheckBox(name))
-            
-        vbox_right.addStretch()
-        layout.addLayout(vbox_right)
+
 
 
 class VideoEffectsWidget(QWidget):
@@ -448,259 +127,13 @@ class VideoEffectsWidget(QWidget):
         self.tabs.addTab(VideoColorsWidget(vlc_engine), "Colors")
         self.tabs.addTab(VideoGeometryWidget(vlc_engine), "Geometry")
         self.tabs.addTab(VideoOverlayWidget(vlc_engine), "Overlay")
+        self.tabs.addTab(VideoAtmolightWidget(vlc_engine), "Atmolight")
         self.tabs.addTab(VideoAdvancedWidget(vlc_engine), "Advanced")
         
         layout.addWidget(self.tabs)
             
             
-class EqualizerWidget(QWidget):
-    """10-Band Audio Equalizer Widget."""
-    
-    def __init__(self, vlc_engine, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc_engine
-        
-        layout = QVBoxLayout(self)
-        
-        # Enable / Presets
-        top_layout = QHBoxLayout()
-        self.chk_enable = QCheckBox("Enable Equalizer")
-        self.chk_enable.toggled.connect(self._toggle_eq) 
-        # Note: VLC "set_equalizer(None)" disables it. 
-        # "set_equalizer(eq)" enables it.
-        # We need to maintain state.
-        
-        self.combo_presets = QComboBox()
-        self.combo_presets.addItems(self.vlc.get_equalizer_presets())
-        self.combo_presets.currentIndexChanged.connect(self._apply_preset)
-        
-        top_layout.addWidget(self.chk_enable)
-        top_layout.addWidget(QLabel("Presets:"))
-        top_layout.addWidget(self.combo_presets)
-        layout.addLayout(top_layout)
-        
-        # Preamp
-        h_layout = QHBoxLayout()
-        
-        preamp_layout = QVBoxLayout()
-        self.slider_preamp = QSlider(Qt.Vertical)
-        self.slider_preamp.setRange(-200, 200) # -20.0 to 20.0
-        self.slider_preamp.setValue(0)
-        self.slider_preamp.valueChanged.connect(lambda v: self.vlc.set_equalizer_preamp(v / 10.0))
-        preamp_layout.addWidget(self.slider_preamp, 0, Qt.AlignHCenter)
-        preamp_layout.addWidget(QLabel("Preamp"), 0, Qt.AlignHCenter)
-        h_layout.addLayout(preamp_layout)
-        
-        # Bands
-        # Standard VLC Bands: 60, 170, 310, 600, 1k, 3k, 6k, 12k, 14k, 16k
-        self.bands = [
-            "60Hz", "170Hz", "310Hz", "600Hz", "1kHz", 
-            "3kHz", "6kHz", "12kHz", "14kHz", "16kHz"
-        ]
-        self.band_sliders = []
-        
-        for i, freq in enumerate(self.bands):
-            vbox = QVBoxLayout()
-            slider = QSlider(Qt.Vertical)
-            slider.setRange(-200, 200) # -20dB to +20dB
-            slider.setValue(0)
-            slider.valueChanged.connect(lambda v, idx=i: self.vlc.set_equalizer_band(idx, v / 10.0))
-            
-            vbox.addWidget(slider, 0, Qt.AlignHCenter)
-            vbox.addWidget(QLabel(freq), 0, Qt.AlignHCenter)
-            h_layout.addLayout(vbox)
-            self.band_sliders.append(slider)
-            
-        layout.addLayout(h_layout)
-        
-        btns = QDialogButtonBox(QDialogButtonBox.Close)
-        btns.rejected.connect(self.close)
-        layout.addWidget(btns)
-        
-        self.chk_enable.setChecked(False) # Start disabled
-        self._toggle_ui(False)
 
-    def _toggle_eq(self, checked):
-        self._toggle_ui(checked)
-        if checked:
-            # Re-apply current settings
-            self.vlc.set_equalizer_preamp(self.slider_preamp.value() / 10.0)
-            for i, slider in enumerate(self.band_sliders):
-                self.vlc.set_equalizer_band(i, slider.value() / 10.0)
-        else:
-            self.vlc.player.set_equalizer(None)
-
-    def _toggle_ui(self, enabled):
-        self.combo_presets.setEnabled(enabled)
-        self.slider_preamp.setEnabled(enabled)
-        for slider in self.band_sliders:
-            slider.setEnabled(enabled)
-            
-    def _apply_preset(self, index):
-        if self.chk_enable.isChecked():
-            self.vlc.set_equalizer_preset(index)
-            # Update sliders to match preset? 
-            # VLC doesn't give us the band values back easily from the python wrapper if using new_from_preset directly 
-            # without parsing.
-            # For now, we just apply it.
-
-class CompressorWidget(QWidget):
-    """Compressor settings (Stub UI)."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QVBoxLayout(self)
-        
-        self.chk_enable = QCheckBox("Enable")
-        self.chk_enable.toggled.connect(self._toggle_ui)
-        layout.addWidget(self.chk_enable)
-        
-        # Grid of sliders
-        grid = QGridLayout()
-        layout.addLayout(grid)
-        
-        # RMS/Peak, Attack, Release, Threshold, Ratio, Knee, Gain
-        controls = [
-            ("RMS/peak", 0.0, 1.0, 0.2),
-            ("Attack", 1.5, 400.0, 25.0), # ms
-            ("Release", 2.0, 800.0, 100.0), # ms
-            ("Threshold", -30.0, 0.0, -11.0), # dB
-            ("Ratio", 1.0, 20.0, 4.0),
-            ("Knee radius", 1.0, 10.0, 5.0), # dB
-            ("Makeup gain", 0.0, 24.0, 7.0) # dB
-        ]
-        
-        for i, (name, min_v, max_v, def_v) in enumerate(controls):
-            lbl = QLabel(name)
-            slider = QSlider(Qt.Vertical)
-            slider.setRange(int(min_v*10), int(max_v*10))
-            slider.setValue(int(def_v*10))
-            
-            # Label for value
-            val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
-            
-            vbox = QVBoxLayout()
-            vbox.addWidget(slider, 0, Qt.AlignHCenter)
-            vbox.addWidget(val_lbl, 0, Qt.AlignHCenter)
-            vbox.addWidget(lbl, 0, Qt.AlignHCenter)
-            
-            grid.addLayout(vbox, 0, i)
-            
-            # Store for enabling/disabling
-            if not hasattr(self, 'ui_controls'): self.ui_controls = []
-            self.ui_controls.extend([slider, lbl, val_lbl])
-
-        layout.addStretch()
-        
-        self._toggle_ui(False) # Start disabled
-
-    def _toggle_ui(self, enabled):
-        for w in getattr(self, 'ui_controls', []):
-            w.setEnabled(enabled)
-        # Also toggle backend
-        self.vlc.set_compressor(enabled)
-
-
-class SpatializerWidget(QWidget):
-    """Spatializer settings (Stub UI)."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QVBoxLayout(self)
-        
-        self.chk_enable = QCheckBox("Enable")
-        self.chk_enable.toggled.connect(self._toggle_ui)
-        layout.addWidget(self.chk_enable)
-        
-        grid = QGridLayout()
-        layout.addLayout(grid)
-        
-        # Size, Width, Wet, Dry, Damp
-        controls = [
-            ("Size", 0, 10, 8.0),
-            ("Width", 0, 10, 10.0),
-            ("Wet", 0, 10, 4.0),
-            ("Dry", 0, 10, 5.0),
-            ("Damp", 0, 10, 5.0)
-        ]
-        
-        for i, (name, min_v, max_v, def_v) in enumerate(controls):
-            lbl = QLabel(name)
-            slider = QSlider(Qt.Vertical)
-            slider.setRange(int(min_v*10), int(max_v*10))
-            slider.setValue(int(def_v*10))
-            
-            val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
-            
-            vbox = QVBoxLayout()
-            vbox.addWidget(slider, 0, Qt.AlignHCenter)
-            vbox.addWidget(val_lbl, 0, Qt.AlignHCenter)
-            vbox.addWidget(lbl, 0, Qt.AlignHCenter)
-            
-            grid.addLayout(vbox, 0, i)
-            
-            if not hasattr(self, 'ui_controls'): self.ui_controls = []
-            self.ui_controls.extend([slider, lbl, val_lbl])
-        
-        layout.addStretch()
-        self._toggle_ui(False)
-
-    def _toggle_ui(self, enabled):
-        for w in getattr(self, 'ui_controls', []):
-            w.setEnabled(enabled)
-        self.vlc.set_spatializer(enabled)
-
-
-class StereoWidenerWidget(QWidget):
-    """Stereo Widener settings (Stub UI)."""
-    def __init__(self, vlc, parent=None):
-        super().__init__(parent)
-        self.vlc = vlc
-        layout = QVBoxLayout(self)
-        
-        self.chk_enable = QCheckBox("Enable")
-        self.chk_enable.toggled.connect(self._toggle_ui)
-        layout.addWidget(self.chk_enable)
-        
-        grid = QGridLayout()
-        layout.addLayout(grid)
-        
-        # Delay, Feedback, Crossfeed, Dry mix
-        controls = [
-            ("Delay time", 0, 100, 20.0),
-            ("Feedback gain", 0, 1, 0.3),
-            ("Crossfeed", 0, 1, 0.3),
-            ("Dry mix", 0, 1, 0.8)
-        ]
-        
-        for i, (name, min_v, max_v, def_v) in enumerate(controls):
-            lbl = QLabel(name)
-            slider = QSlider(Qt.Vertical)
-            slider.setRange(int(min_v*10), int(max_v*10))
-            slider.setValue(int(def_v*10))
-            
-            val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
-            
-            vbox = QVBoxLayout()
-            vbox.addWidget(slider, 0, Qt.AlignHCenter)
-            vbox.addWidget(val_lbl, 0, Qt.AlignHCenter)
-            vbox.addWidget(lbl, 0, Qt.AlignHCenter)
-            
-            grid.addLayout(vbox, 0, i)
-
-            if not hasattr(self, 'ui_controls'): self.ui_controls = []
-            self.ui_controls.extend([slider, lbl, val_lbl])
-        
-        layout.addStretch()
-        self._toggle_ui(False)
-
-    def _toggle_ui(self, enabled):
-        for w in getattr(self, 'ui_controls', []):
-            w.setEnabled(enabled)
-        self.vlc.set_stereo_widener(enabled)
 
 
 class AdvancedAudioWidget(QWidget):
@@ -751,8 +184,6 @@ class AudioEffectsWidget(QWidget):
         self.tabs.addTab(EqualizerWidget(vlc, self), "Equalizer")
         self.tabs.addTab(CompressorWidget(vlc, self), "Compressor")
         self.tabs.addTab(SpatializerWidget(vlc, self), "Spatializer")
-        self.tabs.addTab(StereoWidenerWidget(vlc, self), "Stereo Widener")
-        self.tabs.addTab(AdvancedAudioWidget(vlc, self), "Advanced")
         
         layout.addWidget(self.tabs)
 
@@ -1600,12 +1031,67 @@ class VideoEffectsDialog(QDialog):
         else:
             self.vlc.set_adjust_float(option, value / 100.0)
 
-    def _toggle_transform(self, enabled):
-        self.combo_rotate.setEnabled(enabled)
-        if not enabled:
-            self.vlc.set_rotate(0)
-        else:
-            self._on_transform_changed(self.combo_rotate.currentIndex())
+    def _on_transform_changed(self, index):
+        if not self.chk_transform.isChecked():
+            return
+        # VLC rotation values: 0, 90, 180, 270...
+        mapping = { 0: 90, 1: 180, 2: 270, 3: 0, 4: 0 } # Simplified
+        self.vlc.set_rotate(mapping.get(index, 0))
+
+
+class PreferencesDialog(QDialog):
+    """VLC-style Preferences Dialog."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Simple Preferences")
+        self.resize(700, 500)
+        
+        layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        
+        # Tabs as requested
+        self.tabs.addTab(QWidget(), "Interface")
+        self.tabs.addTab(QWidget(), "Audio")
+        self.tabs.addTab(QWidget(), "Video")
+        self.tabs.addTab(QWidget(), "Subtitles / OSD")
+        self.tabs.addTab(QWidget(), "Input / Codecs")
+        self.tabs.addTab(QWidget(), "Hotkeys")
+        
+        # Add some placeholder text for each tab
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            l = QVBoxLayout(tab)
+            l.addWidget(QLabel(f"{self.tabs.tabText(i)} settings will be available here."))
+            l.addStretch()
+            
+        layout.addWidget(self.tabs)
+        
+        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+
+class BookmarksDialog(QDialog):
+    """VLC-style Custom Bookmarks Dialog."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Bookmarks")
+        self.resize(400, 300)
+        
+        layout = QVBoxLayout(self)
+        
+        from PySide6.QtWidgets import QTableWidget
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["Description", "Time"])
+        layout.addWidget(self.table)
+        
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.addButton("Create", QDialogButtonBox.ActionRole)
+        btns.addButton("Delete", QDialogButtonBox.ActionRole)
+        
+        layout.addWidget(btns)
+        btns.rejected.connect(self.close)
 
     def _on_transform_changed(self, index):
         angles = [90, 180, 270, -1, -2]

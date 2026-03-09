@@ -258,8 +258,17 @@ class OverlayControls(QWidget):
         self.lbl_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.lbl_info.hide() 
 
+        # Create fullscreen button with proper settings
         self.btn_fullscreen = QPushButton("⛶")
         self.btn_fullscreen.setFixedSize(30, 30)
+        self.btn_fullscreen.setToolTip("Fullscreen (F)")
+        self.btn_fullscreen.setStyleSheet("QPushButton:hover { background-color: #333; border: 1px solid #555; }")
+        self.btn_fullscreen.setFocusPolicy(Qt.NoFocus)
+
+        # Apply NoFocus to all other buttons to prevent them from stealing Space key
+        for btn in self.findChildren(QPushButton):
+            if btn != self.btn_fullscreen:
+                btn.setFocusPolicy(Qt.NoFocus)
 
         btn_row.addWidget(self.btn_open)
         btn_row.addWidget(self.btn_playlist)

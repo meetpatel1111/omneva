@@ -408,11 +408,6 @@ class MainWindow(QMainWindow):
         # Library → Player: play selected file
         self.library_page.play_file_requested.connect(self._play_from_library)
 
-    def _play_from_library(self, file_path: str):
-        """Play selected file from library."""
-        self._play_media(file_path)
-
-
         # Transcoder → QueuePanel: wire job signals
         self.transcoder_page.job_added.connect(self._on_job_added)
         self.transcoder_page.queue.job_progress.connect(self.queue_page.on_job_progress)
@@ -452,7 +447,6 @@ class MainWindow(QMainWindow):
         self.act_speed_faster.triggered.connect(lambda: self.player_page._set_speed(round(self.player_page.vlc.get_rate() + 0.05, 2)))
         self.act_speed_normal.triggered.connect(lambda: self.player_page._set_speed(1.0))
         self.act_speed_slower.triggered.connect(lambda: self.player_page._set_speed(round(self.player_page.vlc.get_rate() - 0.05, 2)))
-
 
         self.act_jump_fwd.triggered.connect(lambda: self.player_page.vlc.seek_relative(10))
         self.act_jump_back.triggered.connect(lambda: self.player_page.vlc.seek_relative(-10))

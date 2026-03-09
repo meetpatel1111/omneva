@@ -30,9 +30,20 @@ class VLCEngine(QObject):
             os.add_dll_directory(vlc_path)
 
         args = [
+            # Basic configuration
             "--no-xlib",          # Linux: no X11 dependency for threads
             "--quiet",            # Suppress console output
             "--no-video-title-show",  # No video title overlay
+            
+            # Hardware acceleration (compatible with VLC)
+            "--avcodec-hw",       # Enable hardware decoding (compatible)
+            
+            # Performance optimizations
+            "--ffmpeg-threads=4", # Multi-threaded decoding
+            
+            # Network optimizations
+            "--network-caching=1000", # 1s network cache
+            "--rtsp-tcp",         # Use TCP for RTSP (more reliable)
         ]
         
         # In PyInstaller EXEs, libvlc fails to find plugins because the process dir != VLC dir
@@ -43,7 +54,18 @@ class VLCEngine(QObject):
                 args.append(f"--plugin-path={plugin_path}")
 
         # Create VLC instance
-        self.instance = vlc.Instance(args)
+        try:
+            self.instance = vlc.Instance(args)
+            if self.instance is None:
+                # Fallback to basic args if advanced args fail
+                basic_args = ["--no-xlib", "--quiet"]
+                self.instance = vlc.Instance(basic_args)
+                if self.instance is None:
+                    raise Exception("Failed to create VLC instance with basic args")
+        except Exception as e:
+            print(f"VLC instance creation failed: {e}")
+            raise
+        
         self.player = self.instance.media_player_new()
         
         # Disable VLC's internal input handling so Qt gets events
@@ -212,16 +234,6 @@ class VLCEngine(QObject):
         """Decrease volume by 5%."""
         current = self.get_volume()
         self.set_volume(current - 5)
-
-    def get_audio_delay(self):
-        """Get audio delay in microseconds."""
-        return self.player.audio_get_delay()
-
-    def set_audio_delay(self, delay_ms: int):
-        """Set audio delay in milliseconds."""
-        # VLC API uses microseconds
-        self.player.audio_set_delay(delay_ms * 1000)
-        return delay_ms
 
     def is_muted(self) -> bool:
         return bool(self.player.audio_get_mute())
@@ -710,6 +722,34 @@ class VLCEngine(QObject):
         self.take_snapshot(path, 0, 0)
         return path
 
+    def get_video_size(self) -> tuple[int, int]:
+        """Get current video dimensions (width, height)."""
+        try:
+            # Get video track dimensions
+            tracks = self.get_video_tracks()
+            if tracks:
+                # Try to get dimensions from current media
+                if hasattr(self, 'media') and self.media:
+                    # Get media info
+                    media_info = self.media.get_parsed()
+                    if media_info:
+                        # Extract video dimensions from media info
+                        for track in media_info.get_tracks():
+                            if track.get_type() == vlc.TrackType.Video:
+                                return (track.get_width(), track.get_height())
+                
+                # Fallback: try VLC player dimensions
+                width = self.player.video_get_width()
+                height = self.player.video_get_height()
+                if width > 0 and height > 0:
+                    return (width, height)
+                    
+        except Exception:
+            pass
+            
+        # Default fallback
+        return (0, 0)
+
     def take_snapshot(self, path: str, width: int = 0, height: int = 0):
         """Take a snapshot of the current video."""
         self.player.video_take_snapshot(0, path, width, height)
@@ -719,6 +759,59 @@ class VLCEngine(QObject):
     def enable_video_adjust(self, enable: bool):
         """Enable or disable video adjust filters (Contrast, Brightness, etc.)."""
         self.player.video_set_adjust_float(vlc.VideoAdjustOption.Enable, 1.0 if enable else 0.0)
+
+    def set_brightness(self, brightness: float):
+        """Set video brightness (0.0 to 2.0, 1.0 is default)."""
+        brightness = max(0.0, min(2.0, brightness))
+        self.player.video_set_adjust_float(vlc.VideoAdjustOption.Brightness, brightness)
+
+    def get_brightness(self) -> float:
+        """Get current video brightness."""
+        return self.player.video_get_adjust_float(vlc.VideoAdjustOption.Brightness)
+
+    def set_contrast(self, contrast: float):
+        """Set video contrast (0.0 to 2.0, 1.0 is default)."""
+        contrast = max(0.0, min(2.0, contrast))
+        self.player.video_set_adjust_float(vlc.VideoAdjustOption.Contrast, contrast)
+
+    def get_contrast(self) -> float:
+        """Get current video contrast."""
+        return self.player.video_get_adjust_float(vlc.VideoAdjustOption.Contrast)
+
+    def set_saturation(self, saturation: float):
+        """Set video saturation (0.0 to 3.0, 1.0 is default)."""
+        saturation = max(0.0, min(3.0, saturation))
+        self.player.video_set_adjust_float(vlc.VideoAdjustOption.Saturation, saturation)
+
+    def get_saturation(self) -> float:
+        """Get current video saturation."""
+        return self.player.video_get_adjust_float(vlc.VideoAdjustOption.Saturation)
+
+    def set_hue(self, hue: float):
+        """Set video hue (-180 to 180, 0 is default)."""
+        hue = max(-180.0, min(180.0, hue))
+        self.player.video_set_adjust_float(vlc.VideoAdjustOption.Hue, hue)
+
+    def get_hue(self) -> float:
+        """Get current video hue."""
+        return self.player.video_get_adjust_float(vlc.VideoAdjustOption.Hue)
+
+    def set_gamma(self, gamma: float):
+        """Set video gamma (0.01 to 10.0, 1.0 is default)."""
+        gamma = max(0.01, min(10.0, gamma))
+        self.player.video_set_adjust_float(vlc.VideoAdjustOption.Gamma, gamma)
+
+    def get_gamma(self) -> float:
+        """Get current video gamma."""
+        return self.player.video_get_adjust_float(vlc.VideoAdjustOption.Gamma)
+
+    def reset_video_adjustments(self):
+        """Reset all video adjustments to defaults."""
+        self.set_brightness(1.0)
+        self.set_contrast(1.0)
+        self.set_saturation(1.0)
+        self.set_hue(0.0)
+        self.set_gamma(1.0)
 
     def set_adjust_float(self, option_id, value: float):
         """Set float adjust option (Contrast, Brightness, Saturation, Gamma)."""
@@ -730,16 +823,6 @@ class VLCEngine(QObject):
         self.player.video_set_adjust_int(option_id, value)
 
     # ─── Synchronization ───
-
-    def set_audio_delay(self, delay_ms):
-        """Set audio delay in milliseconds."""
-        self.player.audio_set_delay(delay_ms * 1000)
-        self._audio_delay = delay_ms
-        return delay_ms
-
-    def get_audio_delay(self):
-        """Get audio delay in milliseconds."""
-        return self._audio_delay
 
     def set_subtitle_delay(self, delay_ms):
         """Set subtitle delay in milliseconds."""
@@ -791,23 +874,51 @@ class VLCEngine(QObject):
             self.equalizer = vlc.AudioEqualizer()
             self.player.set_equalizer(self.equalizer)
 
+    def set_equalizer_enabled(self, enabled: bool):
+        """Enable or disable equalizer."""
+        if enabled:
+            if not hasattr(self, 'equalizer'):
+                self.setup_equalizer()
+        else:
+            # Create a flat equalizer (disabled)
+            flat_eq = vlc.AudioEqualizer()
+            self.player.set_equalizer(flat_eq)
+
     def set_equalizer_band(self, band_index: int, amp: float):
         """Set amplification for a specific band (index 0-9). amp: -20.0 to 20.0"""
         if not hasattr(self, 'equalizer'):
             self.setup_equalizer()
+        amp = max(-20.0, min(20.0, amp))
         self.equalizer.set_amp_at_index(amp, band_index)
-        self.player.set_equalizer(self.equalizer) # Re-apply needed? Usually real-time.
+        self.player.set_equalizer(self.equalizer)
+
+    def get_equalizer_band(self, band_index: int) -> float:
+        """Get amplification for a specific band."""
+        if not hasattr(self, 'equalizer'):
+            return 0.0
+        return self.equalizer.get_amp_at_index(band_index)
 
     def set_equalizer_preamp(self, preamp: float):
         """Set global preamp. preamp: -20.0 to 20.0"""
         if not hasattr(self, 'equalizer'):
             self.setup_equalizer()
+        preamp = max(-20.0, min(20.0, preamp))
         self.equalizer.set_preamp(preamp)
         self.player.set_equalizer(self.equalizer)
 
+    def get_equalizer_preamp(self) -> float:
+        """Get current preamp value."""
+        if not hasattr(self, 'equalizer'):
+            return 0.0
+        return self.equalizer.get_preamp()
+
+    def get_equalizer_frequencies(self) -> list[float]:
+        """Get frequency values for each band (Hz)."""
+        # Standard 10-band equalizer frequencies
+        return [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000]
+
     def get_equalizer_presets(self) -> list[str]:
         """Get list of preset names."""
-        # vlc.AudioEqualizer.get_preset_count()
         if not hasattr(vlc, 'libvlc_audio_equalizer_get_preset_count'):
             return []
         count = vlc.libvlc_audio_equalizer_get_preset_count()
@@ -816,6 +927,56 @@ class VLCEngine(QObject):
             name = vlc.libvlc_audio_equalizer_get_preset_name(i)
             presets.append(name.decode() if isinstance(name, bytes) else name)
         return presets
+
+    def set_equalizer_preset(self, preset_index: int):
+        """Apply a preset by index."""
+        self.equalizer = vlc.AudioEqualizer.new_from_preset(preset_index)
+        self.player.set_equalizer(self.equalizer)
+
+    def reset_equalizer(self):
+        """Reset equalizer to flat settings."""
+        self.set_equalizer_preamp(0.0)
+        for i in range(10):
+            self.set_equalizer_band(i, 0.0)
+
+    # ─── Audio Filters ─────────────────────────────────────
+
+    def enable_audio_filter(self, filter_name: str, enabled: bool):
+        """Enable or disable an audio filter."""
+        # Common VLC audio filters: "compressor", "spatializer", "equalizer", "normvol"
+        if enabled:
+            self.player.add_filter(filter_name)
+        else:
+            self.player.remove_filter(filter_name)
+
+    def set_compressor(self, enabled: bool, **kwargs):
+        """Configure compressor."""
+        self.enable_audio_filter("compressor", enabled)
+        if enabled and hasattr(self, 'equalizer'):
+            # VLC compressor uses equalizer API internally
+            # Additional parameters can be set via media options if needed
+            pass
+
+    def set_spatializer(self, enabled: bool, **kwargs):
+        """Configure spatializer."""
+        self.enable_audio_filter("spatializer", enabled)
+
+    def set_stereo_widener(self, enabled: bool, **kwargs):
+        """Configure stereo widener."""
+        self.enable_audio_filter("stereo_widener", enabled)
+
+    def set_normalizer(self, enabled: bool, **kwargs):
+        """Enable volume normalizer."""
+        self.enable_audio_filter("normvol", enabled)
+
+    def set_pitch_shift(self, enabled: bool, pitch_factor: float = 1.0):
+        """Enable pitch shifting (requires scaletempo)."""
+        if enabled:
+            # This is more complex and requires media options
+            # For now, we'll use rate adjustment as approximation
+            self.set_rate(pitch_factor)
+        else:
+            self.set_rate(1.0)
 
     # ─── Renderer Discovery (Casting) ───────────────────────
 
@@ -1153,7 +1314,87 @@ class VLCEngine(QObject):
 
     def set_subtitle_file(self, sub_path: str):
         """Load an external subtitle file."""
-        self.player.video_set_subtitle_file(sub_path)
+        if os.path.isfile(sub_path):
+            self.player.video_set_subtitle_file(sub_path)
+            return True
+        return False
+
+    def add_subtitle_file(self, sub_path: str):
+        """Add external subtitle file to current media."""
+        # This requires media options, more complex than set_subtitle_file
+        if hasattr(self, 'media') and os.path.isfile(sub_path):
+            self.media.add_option(f":sub-file={sub_path}")
+            # Reload media to apply subtitle
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+            return True
+        return False
+
+    def get_supported_subtitle_formats(self) -> list[str]:
+        """Get list of supported subtitle formats."""
+        return [
+            "srt", "ass", "ssa", "vtt", "sub", "idx", "webvtt", 
+            "sbv", "dfxp", "ttml", "lrc", "smi", "smil"
+        ]
+
+    def is_subtitle_file(self, file_path: str) -> bool:
+        """Check if file is a subtitle file based on extension."""
+        ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+        return ext in self.get_supported_subtitle_formats()
+
+    def set_subtitle_encoding(self, encoding: str):
+        """Set subtitle file encoding."""
+        if hasattr(self, 'media'):
+            self.media.add_option(f":subsdec={encoding}")
+            # Reload media to apply encoding
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_subtitle_position(self, position: int):
+        """Set subtitle position (0-100, from top to bottom)."""
+        if hasattr(self, 'media'):
+            pos = max(0, min(100, position))
+            self.media.add_option(f":sub-pos={pos}")
+            # Reload media to apply position
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_subtitle_size(self, size: int):
+        """Set subtitle font size (0-100)."""
+        if hasattr(self, 'media'):
+            sz = max(0, min(100, size))
+            self.media.add_option(f":sub-size={sz}")
+            # Reload media to apply size
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_subtitle_color(self, color_hex: str):
+        """Set subtitle color (hex format like '#FFFFFF')."""
+        if hasattr(self, 'media') and color_hex.startswith('#'):
+            self.media.add_option(f":sub-color={color_hex[1:]}")
+            # Reload media to apply color
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_subtitle_bold(self, bold: bool):
+        """Enable or disable bold subtitles."""
+        if hasattr(self, 'media'):
+            self.media.add_option(f":sub-bold={'1' if bold else '0'}")
+            # Reload media to apply bold
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
 
     def get_subtitle_tracks(self) -> dict:
         """Get list of available subtitle tracks as {id: name}."""
@@ -1164,7 +1405,16 @@ class VLCEngine(QObject):
         return {d[0]: (d[1].decode() if isinstance(d[1], bytes) else d[1]) for d in desc}
 
     def set_subtitle_track(self, track_id: int):
+        """Set subtitle track by ID."""
         self.player.video_set_spu(track_id)
+
+    def disable_subtitles(self):
+        """Disable all subtitles."""
+        self.player.video_set_spu(-1)
+
+    def get_current_subtitle_track(self) -> int:
+        """Get current subtitle track ID."""
+        return self.player.video_get_spu()
 
     # ─── Audio Tracks ───────────────────────────────────────
 
@@ -1186,31 +1436,6 @@ class VLCEngine(QObject):
     def get_audio_delay(self) -> int:
         """Get audio delay in milliseconds."""
         return self.player.audio_get_delay() // 1000
-
-    # ─── Subtitle ───────────────────────────────────────────
-
-    def set_subtitle_file(self, sub_path: str):
-        """Load an external subtitle file."""
-        self.player.video_set_subtitle_file(sub_path)
-
-    def get_subtitle_tracks(self) -> dict:
-        """Get list of available subtitle tracks as {id: name}."""
-        # video_get_spu_description returns list of (id, name)
-        desc = self.player.video_get_spu_description()
-        if not desc:
-            return {}
-        return {d[0]: (d[1].decode() if isinstance(d[1], bytes) else d[1]) for d in desc}
-
-    def set_subtitle_track(self, track_id: int):
-        self.player.video_set_spu(track_id)
-
-    def set_subtitle_delay(self, delay_ms: int):
-        """Set subtitle delay in milliseconds."""
-        self.player.video_set_spu_delay(delay_ms * 1000)
-
-    def get_subtitle_delay(self) -> int:
-        """Get subtitle delay in milliseconds."""
-        return self.player.video_get_spu_delay() // 1000
 
     # ─── Video Effects (Extended) ───────────────────────────
 
@@ -1308,18 +1533,6 @@ class VLCEngine(QObject):
         # For now, we map to rate
         self.set_rate(pitch)
 
-    def set_compressor(self, enabled: bool, **kwargs):
-        """Configure compressor (Stub)."""
-        pass
-
-    def set_spatializer(self, enabled: bool, **kwargs):
-        """Configure spatializer (Stub)."""
-        pass
-
-    def set_stereo_widener(self, enabled: bool, **kwargs):
-        """Configure stereo widener (Stub)."""
-        pass
-
 
     # ─── Polling ────────────────────────────────────────────
 
@@ -1348,6 +1561,164 @@ class VLCEngine(QObject):
             self._poll_timer.stop()
         elif state == vlc.State.Error:
             self._poll_timer.stop()
+
+    # ─── Media Options ───────────────────────────────────────
+
+    def set_track_selection(self, audio_track: int = None, video_track: int = None, subtitle_track: int = None):
+        """Select specific tracks for playback."""
+        if hasattr(self, 'media'):
+            if audio_track is not None:
+                self.media.add_option(f":audio-track={audio_track}")
+            if video_track is not None:
+                self.media.add_option(f":video-track={video_track}")
+            if subtitle_track is not None:
+                self.media.add_option(f":sub-track={subtitle_track}")
+            
+            # Reload media to apply track selection
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def get_video_tracks(self) -> dict:
+        """Get list of available video tracks as {id: name}."""
+        desc = self.player.video_get_track_description()
+        if not desc:
+            return {}
+        return {d[0]: (d[1].decode() if isinstance(d[1], bytes) else d[1]) for d in desc}
+
+    def set_video_track(self, track_id: int):
+        """Set video track by ID."""
+        self.player.video_set_track(track_id)
+
+    def set_caching_options(self, network_cache: int = 1000, disc_cache: int = 300, file_cache: int = 300):
+        """Configure caching behavior for different media types."""
+        if hasattr(self, 'media'):
+            # Network caching (in ms)
+            self.media.add_option(f":network-caching={network_cache}")
+            # Disc caching (in ms) 
+            self.media.add_option(f":disc-caching={disc_cache}")
+            # File caching (in ms)
+            self.media.add_option(f":file-caching={file_cache}")
+            
+            # Live streaming caching
+            self.media.add_option(f":live-caching={network_cache}")
+            
+            # Reload media to apply caching
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_playback_options(self, start_time: float = None, stop_time: float = None, 
+                           run_time: float = None, ab_loop_start: float = None, 
+                           ab_loop_stop: float = None):
+        """Set playback start/stop times and A-B loop."""
+        if hasattr(self, 'media'):
+            if start_time is not None:
+                self.media.add_option(f":start-time={int(start_time)}")
+            if stop_time is not None:
+                self.media.add_option(f":stop-time={int(stop_time)}")
+            if run_time is not None:
+                self.media.add_option(f":run-time={int(run_time)}")
+            if ab_loop_start is not None:
+                self.media.add_option(f":ab-loop-start={int(ab_loop_start)}")
+            if ab_loop_stop is not None:
+                self.media.add_option(f":ab-loop-stop={int(ab_loop_stop)}")
+            
+            # Reload media to apply playback options
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_playback_speed(self, speed: float = 1.0):
+        """Set default playback speed for media."""
+        if hasattr(self, 'media'):
+            self.media.add_option(f":rate={speed}")
+            # Reload media to apply speed
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_audio_options(self, audio_delay: int = None, audio_channel: int = None):
+        """Set audio-specific options."""
+        if hasattr(self, 'media'):
+            if audio_delay is not None:
+                self.media.add_option(f":audio-desync={audio_delay}")
+            if audio_channel is not None:
+                self.media.add_option(f":audio-channel={audio_channel}")
+            
+            # Reload media to apply audio options
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_video_options(self, video_width: int = None, video_height: int = None, 
+                         crop_geometry: str = None, aspect_ratio: str = None):
+        """Set video-specific options."""
+        if hasattr(self, 'media'):
+            if video_width is not None and video_height is not None:
+                self.media.add_option(f":width={video_width}")
+                self.media.add_option(f":height={video_height}")
+            if crop_geometry is not None:
+                self.media.add_option(f":crop={crop_geometry}")
+            if aspect_ratio is not None:
+                self.media.add_option(f":aspect-ratio={aspect_ratio}")
+            
+            # Reload media to apply video options
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_subtitle_options(self, subtitle_delay: int = None, subtitle_fps: float = None,
+                          subtitle_format: str = None, subtitle_encoding: str = None):
+        """Set subtitle-specific options."""
+        if hasattr(self, 'media'):
+            if subtitle_delay is not None:
+                self.media.add_option(f":sub-delay={subtitle_delay}")
+            if subtitle_fps is not None:
+                self.media.add_option(f":sub-fps={subtitle_fps}")
+            if subtitle_format is not None:
+                self.media.add_option(f":sub-type={subtitle_format}")
+            if subtitle_encoding is not None:
+                self.media.add_option(f":subsdec={subtitle_encoding}")
+            
+            # Reload media to apply subtitle options
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def set_network_options(self, http_user_agent: str = None, http_referrer: str = None,
+                          http_proxy: str = None, timeout: int = None):
+        """Set network streaming options."""
+        if hasattr(self, 'media'):
+            if http_user_agent is not None:
+                self.media.add_option(f":http-user-agent={http_user_agent}")
+            if http_referrer is not None:
+                self.media.add_option(f":http-referrer={http_referrer}")
+            if http_proxy is not None:
+                self.media.add_option(f":http-proxy={http_proxy}")
+            if timeout is not None:
+                self.media.add_option(f":http-timeout={timeout}")
+            
+            # Reload media to apply network options
+            current_pos = self.get_position()
+            self.player.set_media(self.media)
+            if current_pos > 0:
+                self.seek(current_pos)
+
+    def reset_media_options(self):
+        """Reset all media options to defaults."""
+        if hasattr(self, 'media'):
+            # Clear existing options by creating new media object
+            current_file = self._current_file
+            if current_file:
+                self.load(current_file)
 
     # ─── Cleanup ────────────────────────────────────────────
 

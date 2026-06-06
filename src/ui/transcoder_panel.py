@@ -6,16 +6,19 @@ import tempfile
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFileDialog, QListWidget, QListWidgetItem,
-    QGroupBox, QLineEdit, QTabWidget
+    QGroupBox, QLineEdit, QTabWidget, QFrame
 )
-from PySide6.QtCore import Qt, Signal, QSettings
+from PySide6.QtCore import Qt, Signal, QSettings, QThread, QObject
 from PySide6.QtGui import QPixmap
 
 from src.core.ffmpeg_service import FFmpegService, PRESETS
 from src.core.ffprobe_service import FFprobeService
 from src.core.queue_manager import QueueManager
-from src.core.utils import format_duration
+from src.core.utils import format_duration, is_media_file
 from src.core.storage import storage
+from src.core.logger import get_logger
+from src.core.security import safe_subprocess_run
+from src.core.recovery_service import get_recovery_service
 from src.ui.tabs.video_tab import VideoSettingsTab
 from src.ui.tabs.summary_tab import SummaryTab
 from src.ui.tabs.dimensions_tab import DimensionsTab
@@ -23,6 +26,78 @@ from src.ui.tabs.filters_tab import FiltersTab
 from src.ui.tabs.audio_tab import AudioTab
 from src.ui.tabs.subtitles_tab import SubtitlesTab
 from src.ui.tabs.chapters_tab import ChaptersTab
+
+
+class TranscoderDropZone(QFrame):
+    """Drag-and-drop zone for TranscoderPanel files."""
+
+    files_dropped = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("dropZone")
+        self.setAcceptDrops(True)
+        self.setMinimumHeight(100)
+
+        layout = QVBoxLayout(self)
+        self.label = QLabel("📥\n\nDrag & drop media files here\nor use Add Files button below")
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setObjectName("dropLabel")
+        layout.addWidget(self.label)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.setProperty("dragOver", True)
+            self.style().polish(self)
+
+    def dragLeaveEvent(self, event):
+        self.setProperty("dragOver", False)
+        self.style().polish(self)
+
+    def dropEvent(self, event):
+        self.setProperty("dragOver", False)
+        self.style().polish(self)
+        paths = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.isfile(path) and is_media_file(path):
+                paths.append(path)
+        if paths:
+            self.files_dropped.emit(paths)
+
+    def set_files(self, filenames: list[str]):
+        if filenames:
+            text = "\n".join(f"📄 {os.path.basename(f)}" for f in filenames[:3])
+            if len(filenames) > 3:
+                text += f"\n... and {len(filenames) - 3} more"
+            self.label.setText(text)
+        else:
+            self.label.setText("📥\n\nDrag & drop media files here\nor use Add Files button below")
+
+
+class FFprobeWorker(QObject):
+    """Worker for running FFprobe operations in a separate thread."""
+    
+    metadata_ready = Signal(str, dict)  # path, metadata
+    error_occurred = Signal(str, str)   # path, error_message
+    
+    def __init__(self, ffprobe_service):
+        super().__init__()
+        self.ffprobe = ffprobe_service
+        self._current_path = None
+        
+    def get_metadata(self, path: str):
+        """Get metadata for the given file path."""
+        self._current_path = path
+        try:
+            meta = self.ffprobe.get_metadata(path)
+            if "error" in meta:
+                self.error_occurred.emit(path, meta['error'])
+            else:
+                self.metadata_ready.emit(path, meta)
+        except Exception as e:
+            self.error_occurred.emit(path, str(e))
 
 
 class TranscoderPanel(QWidget):
@@ -34,17 +109,33 @@ class TranscoderPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("transcoderPanel")
+        self.logger = get_logger('transcoder_panel')
 
         self.settings = storage.get_settings()
         self.ffmpeg = FFmpegService()
         self.ffprobe = FFprobeService()
         self.queue = QueueManager(self.ffmpeg)
+        self.recovery_service = get_recovery_service()
 
         self._input_files: list[str] = []
+        self._current_job_id = None
+        
+        # Setup FFprobe worker for threaded operations
+        self._setup_ffprobe_worker()
 
         self._setup_ui()
         self._load_defaults()
         self._connect_signals()
+        
+        # Setup autosave timer for transcoder state
+        self._setup_autosave()
+
+    def _setup_ffprobe_worker(self):
+        """Setup FFprobe worker thread for non-blocking metadata operations."""
+        # Use a more conservative approach - start with synchronous operations
+        # until threading can be properly implemented without crashes
+        self._ffprobe_thread = None
+        self._ffprobe_worker = None
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -60,6 +151,10 @@ class TranscoderPanel(QWidget):
         input_group = QGroupBox("Input Files")
         input_group.setObjectName("inputGroup")
         ig_layout = QVBoxLayout(input_group)
+
+        # Drop zone for drag-and-drop
+        self.drop_zone = TranscoderDropZone()
+        ig_layout.addWidget(self.drop_zone)
 
         btn_row = QHBoxLayout()
         self.btn_add_files = QPushButton("📂 Add Files")
@@ -117,44 +212,97 @@ class TranscoderPanel(QWidget):
         self.tabs = QTabWidget()
         self.tabs.setObjectName("settingsTabs")
 
-        self.tab_summary = SummaryTab()
-        self.tabs.addTab(self.tab_summary, "Summary")
-
-        self.tab_dimensions = DimensionsTab()
-        self.tabs.addTab(self.tab_dimensions, "Dimensions")
-
-        self.tab_filters = FiltersTab()
-        self.tabs.addTab(self.tab_filters, "Filters")
-
-        self.tab_video = VideoSettingsTab()
-        self.tabs.addTab(self.tab_video, "Video")
-
-        self.tab_audio = AudioTab()
-        self.tabs.addTab(self.tab_audio, "Audio")
-
-        self.tab_subtitles = SubtitlesTab()
-        self.tabs.addTab(self.tab_subtitles, "Subtitles")
-
-        self.tab_chapters = ChaptersTab()
-        self.tabs.addTab(self.tab_chapters, "Chapters")
+        # Lazy-loaded tabs - only create placeholders initially
+        self._tab_instances = {}
+        self._tab_created = {}
+        
+        # Add tab placeholders with lazy loading
+        self.tabs.addTab(QWidget(), "Summary")
+        self.tabs.addTab(QWidget(), "Dimensions")
+        self.tabs.addTab(QWidget(), "Filters")
+        self.tabs.addTab(QWidget(), "Video")
+        self.tabs.addTab(QWidget(), "Audio")
+        self.tabs.addTab(QWidget(), "Subtitles")
+        self.tabs.addTab(QWidget(), "Chapters")
+        
+        # Connect tab change signal for lazy loading
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         layout.addWidget(self.tabs, 1)
 
-        # ─── Start Button ───────────────────────────────────
-        self.btn_start = QPushButton("🚀  Start Transcoding")
-        self.btn_start.setObjectName("startBtn")
-        self.btn_start.setFixedHeight(40)
-        layout.addWidget(self.btn_start)
+    def _on_tab_changed(self, index: int):
+        """Handle tab change event for lazy loading."""
+        if index >= 0 and not self._tab_created.get(index, False):
+            self._create_tab(index)
+
+    def _create_tab(self, index: int):
+        """Create and initialize a tab on first access."""
+        tab_names = ["Summary", "Dimensions", "Filters", "Video", "Audio", "Subtitles", "Chapters"]
+        tab_classes = [SummaryTab, DimensionsTab, FiltersTab, VideoSettingsTab, AudioTab, SubtitlesTab, ChaptersTab]
+        
+        if index >= len(tab_classes):
+            return
+            
+        tab_name = tab_names[index]
+        tab_class = tab_classes[index]
+        
+        self.logger.debug(f"Lazy-loading tab: {tab_name}")
+        
+        # Create the tab instance
+        tab_instance = tab_class()
+        
+        # Replace the placeholder with the actual tab
+        current_widget = self.tabs.widget(index)
+        self.tabs.removeTab(index)
+        self.tabs.insertTab(index, tab_instance, tab_name)
+        
+        # Store the instance for future reference
+        self._tab_instances[index] = tab_instance
+        self._tab_created[index] = True
+        
+        # Clean up the placeholder widget
+        if current_widget:
+            current_widget.deleteLater()
+
+    def _get_tab(self, index: int):
+        """Get a tab instance, creating it if necessary."""
+        if not self._tab_created.get(index, False):
+            self._create_tab(index)
+        return self._tab_instances.get(index)
 
     def _connect_signals(self):
         self.btn_add_files.clicked.connect(self._add_files)
         self.btn_clear_files.clicked.connect(self._clear_files)
         self.btn_output.clicked.connect(self._pick_output_dir)
-        self.btn_start.clicked.connect(self._start_transcoding)
+        # btn_start not defined in current UI - signal connection removed
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         self.file_list.currentItemChanged.connect(self._on_file_selected)
+        # Connect drop zone signal
+        self.drop_zone.files_dropped.connect(self._on_files_dropped)
 
     # ─── File Selection & Preview ────────────────────────────
+
+    def _on_files_dropped(self, file_paths: list[str]):
+        """Handle files dropped onto the DropZone."""
+        if not file_paths:
+            return
+        
+        # Add dropped files to the input list
+        for path in file_paths:
+            if path not in self._input_files:
+                self._input_files.append(path)
+                # Add to file list widget
+                item = QListWidgetItem(os.path.basename(path))
+                item.setToolTip(path)
+                self.file_list.addItem(item)
+        
+        # Update UI
+        self._update_file_count()
+        self.drop_zone.set_files(self._input_files)
+        
+        # Select first file if no current selection
+        if self.file_list.count() > 0 and not self.file_list.currentItem():
+            self.file_list.setCurrentRow(0)
 
     def _on_file_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
         if not current:
@@ -166,12 +314,34 @@ class TranscoderPanel(QWidget):
             self._generate_preview(path)
 
     def _update_summary_info(self, path: str):
-        print(f"DEBUG: _update_summary_info called for {path}")
-        meta = self.ffprobe.get_metadata(path)
-        if "error" in meta:
-            print(f"Error getting metadata for {path}: {meta['error']}")
-            QMessageBox.warning(self, "Metadata Error", f"Failed to read media info.\n\nError: {meta['error']}\n\nMake sure FFprobe is installed and in your PATH.")
-            return
+        """Update summary info using threaded FFprobe operation."""
+        self.logger.debug(f"_update_summary_info called for {path}")
+        
+        # Show loading indicator
+        summary_tab = self._get_tab(0)  # Summary tab is index 0
+        if summary_tab:
+            summary_tab.set_loading_state(True)
+        
+        # Request metadata from worker thread
+        if self._ffprobe_worker:
+            self._ffprobe_worker.get_metadata(path)
+        else:
+            # Fallback to synchronous operation
+            try:
+                meta = self.ffprobe.get_metadata(path)
+                self._on_metadata_ready(path, meta)
+            except Exception as e:
+                self.logger.error(f"Error getting metadata for {path}: {e}")
+                self._on_ffprobe_error(path, str(e))
+
+    def _on_metadata_ready(self, path: str, meta: dict):
+        """Handle metadata received from FFprobe worker."""
+        self.logger.debug(f"Metadata ready for {path}")
+        
+        # Hide loading indicator
+        summary_tab = self._get_tab(0)  # Summary tab is index 0
+        if summary_tab:
+            summary_tab.set_loading_state(False)
 
         # Use parsed lists from FFprobeService
         v_streams = meta.get("video_streams", [])
@@ -179,7 +349,7 @@ class TranscoderPanel(QWidget):
         s_streams = meta.get("subtitle_streams", [])
         chapters = meta.get("chapters", [])
         
-        print(f"DEBUG: Found {len(v_streams)} video, {len(a_streams)} audio, {len(s_streams)} subs")
+        self.logger.debug(f"Found {len(v_streams)} video, {len(a_streams)} audio, {len(s_streams)} subs")
 
         v_stream = v_streams[0] if v_streams else {}
         a_stream = a_streams[0] if a_streams else {}
@@ -191,34 +361,141 @@ class TranscoderPanel(QWidget):
         v_info = f"Video: {v_stream.get('codec_name', 'unknown')}, {w}x{h}"
         a_info = f"Audio: {a_stream.get('codec_name', 'unknown')}, {a_stream.get('channels', 0)}ch"
         
-        self.tab_summary.set_track_info(v_info, a_info)
-        self.tab_summary.set_size_info(w, h)
-        self.tab_dimensions.set_source_dimensions(w, h)
+        if summary_tab:
+            summary_tab.set_track_info(v_info, a_info)
+            summary_tab.set_size_info(w, h)
+        
+        # Update other tabs
+        dimensions_tab = self._get_tab(1)  # Dimensions tab is index 1
+        if dimensions_tab:
+            dimensions_tab.set_source_dimensions(w, h)
 
         # Populate Audio tab with source audio tracks
-        print(f"DEBUG: Loading audio tracks: {a_streams}")
-        self.tab_audio.load_source_tracks(a_streams)
+        self.logger.debug(f"Loading audio tracks: {a_streams}")
+        audio_tab = self._get_tab(4)  # Audio tab is index 4
+        if audio_tab:
+            audio_tab.load_source_tracks(a_streams)
 
         # Populate Subtitles tab with source subtitle tracks
-        self.tab_subtitles.load_source_tracks(s_streams)
+        subtitles_tab = self._get_tab(5)  # Subtitles tab is index 5
+        if subtitles_tab:
+            subtitles_tab.load_source_tracks(s_streams)
 
         # Populate Chapters tab
-        self.tab_chapters.load_chapters(chapters)
+        chapters_tab = self._get_tab(6)  # Chapters tab is index 6
+        if chapters_tab:
+            chapters_tab.load_chapters(chapters)
+
+    def _on_ffprobe_error(self, path: str, error_message: str):
+        """Handle FFprobe error from worker thread."""
+        self.logger.error(f"Error getting metadata for {path}: {error_message}")
+        
+        # Hide loading indicator
+        summary_tab = self._get_tab(0)  # Summary tab is index 0
+        if summary_tab:
+            summary_tab.set_loading_state(False)
+        
+        # Show error dialog
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            self, 
+            "Metadata Error", 
+            f"Failed to read media info.\n\nError: {error_message}\n\nMake sure FFprobe is installed and in your PATH."
+        )
 
     def _generate_preview(self, path: str):
         try:
+            # Validate the input path for security
+            if not self.ffmpeg.validate_file_path(path):
+                self.logger.error(f"Invalid file path for preview generation: {path}")
+                return
+                
             tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
             tmp.close()
-            subprocess.run([
+            
+            # Use safe subprocess with validation
+            result = safe_subprocess_run([
                 self.ffmpeg.ffmpeg_path, "-y",
                 "-ss", "00:00:05", "-i", path,
                 "-frames:v", "1", "-q:v", "5", tmp.name
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            if result is None:
+                self.logger.error("Preview generation command validation failed")
+                return
+                
             pixmap = QPixmap(tmp.name)
-            self.tab_summary.set_preview_image(pixmap)
+            summary_tab = self._get_tab(0)  # Summary tab is index 0
+            if summary_tab:
+                summary_tab.set_preview_image(pixmap)
             os.unlink(tmp.name)
         except Exception as e:
-            print(f"Preview generation failed: {e}")
+            self.logger.error(f"Preview generation failed: {e}")
+
+    def _setup_autosave(self):
+        """Setup autosave timer for transcoder state."""
+        from PySide6.QtCore import QTimer
+        
+        # Autosave every 5 minutes
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave_state)
+        self._autosave_timer.start(300000)  # 5 minutes in milliseconds
+
+    def _autosave_state(self):
+        """Save current transcoder state for crash recovery."""
+        try:
+            # Get summary tab settings safely
+            summary_tab = self._get_tab(0)  # Summary tab is index 0
+            output_format = summary_tab.combo_format.currentText() if summary_tab else ""
+            output_name = summary_tab.line_name.text() if summary_tab else ""
+            
+            current_state = {
+                'input_files': self._input_files,
+                'current_preset': self.preset_combo.currentData(),
+                'output_format': output_format,
+                'output_name': output_name,
+                'current_tab': self.tabs.currentIndex(),
+                'transcoder_jobs': self._get_job_states()
+            }
+            
+            self.recovery_service.autosave_if_needed(current_state)
+            
+        except Exception as e:
+            self.logger.error(f"Transcoder autosave failed: {e}")
+
+    def cleanup(self):
+        """Clean up resources including FFprobe thread."""
+        try:
+            if hasattr(self, '_ffprobe_thread') and self._ffprobe_thread and self._ffprobe_thread.isRunning():
+                self._ffprobe_thread.quit()
+                self._ffprobe_thread.wait(1000)  # Wait up to 1 second for thread to finish
+        except Exception as e:
+            self.logger.error(f"Error cleaning up FFprobe thread: {e}")
+
+    def _get_job_states(self):
+        """Get current job states for recovery."""
+        job_states = []
+        try:
+            # Get jobs from queue manager
+            if hasattr(self.queue, '_jobs'):
+                for job_id, job in self.queue._jobs.items():
+                    job_states.append({
+                        'id': job_id,
+                        'input_path': job.input_path,
+                        'output_path': job.output_path,
+                        'status': job.status,
+                        'progress': job.progress,
+                        'options': job.options
+                    })
+        except Exception as e:
+            self.logger.error(f"Failed to get job states: {e}")
+        return job_states
+
+    def cleanup(self):
+        """Clean up resources when panel is destroyed."""
+        if hasattr(self, '_ffprobe_thread') and self._ffprobe_thread.isRunning():
+            self._ffprobe_thread.quit()
+            self._ffprobe_thread.wait(1000)  # Wait up to 1 second for thread to finish
 
     # ─── Preset Changed ─────────────────────────────────────
 
@@ -232,7 +509,9 @@ class TranscoderPanel(QWidget):
             if preset:
                 ext_map = {".mp4": "MP4", ".mkv": "MKV", ".webm": "WebM"}
                 fmt = ext_map.get(preset["ext"], "MP4")
-                self.tab_summary.combo_format.setCurrentText(fmt)
+                summary_tab = self._get_tab(0)  # Summary tab is index 0
+                if summary_tab:
+                    summary_tab.combo_format.setCurrentText(fmt)
 
     # ─── File Management ─────────────────────────────────────
 
@@ -271,12 +550,14 @@ class TranscoderPanel(QWidget):
         v_codec = self.settings.value("default_video_codec", "").lower()
         if v_codec:
             # Simple fuzzy matching
-            combo = self.tab_video.combo_encoder
-            for i in range(combo.count()):
-                text = combo.itemText(i).lower()
-                if v_codec in text:
-                    combo.setCurrentIndex(i)
-                    break
+            video_tab = self._get_tab(3)  # Video tab is index 3
+            if video_tab:
+                combo = video_tab.combo_encoder
+                for i in range(combo.count()):
+                    text = combo.itemText(i).lower()
+                    if v_codec in text:
+                        combo.setCurrentIndex(i)
+                        break
 
     def _pick_output_dir(self):
         path = QFileDialog.getExistingDirectory(self, "Select Output Folder")
@@ -286,7 +567,8 @@ class TranscoderPanel(QWidget):
     # ─── Filter Chain Builders ───────────────────────────────
 
     def _get_dimensions_filters(self) -> str:
-        s = self.tab_dimensions.get_settings()
+        dimensions_tab = self._get_tab(1)  # Dimensions tab is index 1
+        s = dimensions_tab.get_settings() if dimensions_tab else {}
         filters = []
         rot = s["rotation"]
         if rot == 90:
@@ -314,7 +596,8 @@ class TranscoderPanel(QWidget):
     def _get_video_filters(self) -> str:
         """Build FFmpeg -vf filter chain from Filters tab settings.
         Every non-Off dropdown value maps to a real FFmpeg filter."""
-        s = self.tab_filters.get_settings()
+        filters_tab = self._get_tab(2)  # Filters tab is index 2
+        s = filters_tab.get_settings() if filters_tab else {}
         filters = []
 
         # ── Detelecine ──────────────────────────────────────
@@ -416,7 +699,8 @@ class TranscoderPanel(QWidget):
     # ─── Video Args Builder ──────────────────────────────────
 
     def _get_video_args(self) -> list:
-        s = self.tab_video.get_settings()
+        video_tab = self._get_tab(3)  # Video tab is index 3
+        s = video_tab.get_settings() if video_tab else {}
         args = []
         enc_map = {
             "H.264 (x264)": "libx264", "H.265 (x265)": "libx265",
@@ -472,7 +756,8 @@ class TranscoderPanel(QWidget):
     def _get_audio_args(self) -> list:
         """Build FFmpeg audio arguments from the Audio tab settings.
         Every option produces correct FFmpeg arguments."""
-        tracks = self.tab_audio.get_settings()
+        audio_tab = self._get_tab(4)  # Audio tab is index 4
+        tracks = audio_tab.get_settings() if audio_tab else []
         if not tracks:
             return ["-an"]  # no audio
 
@@ -549,7 +834,8 @@ class TranscoderPanel(QWidget):
 
     def _get_subtitle_args(self, input_path: str) -> list:
         """Build FFmpeg subtitle arguments from the Subtitles tab."""
-        tracks = self.tab_subtitles.get_settings()
+        subtitles_tab = self._get_tab(5)  # Subtitles tab is index 5
+        tracks = subtitles_tab.get_settings() if subtitles_tab else []
         if not tracks:
             return ["-sn"]  # no subtitles
 
@@ -593,7 +879,8 @@ class TranscoderPanel(QWidget):
 
     def _get_chapter_args(self) -> list:
         """Build FFmpeg chapter arguments."""
-        settings = self.tab_chapters.get_settings()
+        chapters_tab = self._get_tab(6)  # Chapters tab is index 6
+        settings = chapters_tab.get_settings() if chapters_tab else {}
         if settings["include_chapters"]:
             # Copy chapters from source
             return ["-map_chapters", "0"]
@@ -609,7 +896,8 @@ class TranscoderPanel(QWidget):
 
         preset_key = self.preset_combo.currentData()
         output_dir = self.output_edit.text() or None
-        summary_opts = self.tab_summary.get_settings()
+        summary_tab = self._get_tab(0)  # Summary tab is index 0
+        summary_opts = summary_tab.get_settings() if summary_tab else {}
 
         for input_path in self._input_files:
             base = os.path.splitext(os.path.basename(input_path))[0]

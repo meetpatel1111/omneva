@@ -4,6 +4,7 @@ import os
 import sqlite3
 import sys
 from PySide6.QtCore import QSettings, QStandardPaths
+from .logger import get_logger
 
 class StorageManager:
     _instance = None
@@ -14,6 +15,7 @@ class StorageManager:
             cls._instance.app_data_dir = None
             cls._instance.settings_path = None
             cls._instance.db_path = None
+            cls._instance.logger = get_logger('storage')
         return cls._instance
 
     def _ensure_initialized(self):
@@ -35,15 +37,15 @@ class StorageManager:
             try:
                 os.makedirs(self.app_data_dir)
             except OSError as e:
-                print(f"[Storage] Failed to create AppData dir: {e}")
+                self.logger.error(f"Failed to create AppData dir: {e}")
 
         # Paths
         self.settings_path = os.path.join(self.app_data_dir, "config.ini")
         self.db_path = os.path.join(self.app_data_dir, "omneva.db")
 
-        print(f"[Storage] AppData: {self.app_data_dir}")
-        print(f"[Storage] Settings: {self.settings_path}")
-        print(f"[Storage] Database: {self.db_path}")
+        self.logger.info(f"AppData: {self.app_data_dir}")
+        self.logger.info(f"Settings: {self.settings_path}")
+        self.logger.info(f"Database: {self.db_path}")
 
         # Initialize SQLite
         self._init_db()
@@ -71,7 +73,7 @@ class StorageManager:
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"[Storage] DB Init Error: {e}")
+            self.logger.error(f"DB Init Error: {e}")
 
     # ─── History API ─────────────────────────────────────────
 
@@ -87,7 +89,7 @@ class StorageManager:
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"[Storage] Add History Error: {e}")
+            self.logger.error(f"Add History Error: {e}")
 
     def get_history(self, limit=10) -> list[str]:
         """Get list of recent file paths."""
@@ -101,7 +103,7 @@ class StorageManager:
             paths = [row[0] for row in rows]
             conn.close()
         except Exception as e:
-            print(f"[Storage] Get History Error: {e}")
+            self.logger.error(f"Get History Error: {e}")
         return paths
 
     def clear_history(self):
@@ -114,7 +116,7 @@ class StorageManager:
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"[Storage] Clear History Error: {e}")
+            self.logger.error(f"Clear History Error: {e}")
 
 # Global instance header
 storage = StorageManager()

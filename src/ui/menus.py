@@ -249,6 +249,14 @@ class MenuFactory:
         self.mw.act_preferences = menu.addAction("Preferences")
         self.mw.act_preferences.setShortcut(QKeySequence("Ctrl+P"))
 
+        # Context menu actions (not shown in main menu but needed for context menu)
+        self.mw.act_view_player = QAction("Player", self.mw)
+        self.mw.act_view_library = QAction("Library", self.mw)
+        self.mw.act_view_transcoder = QAction("Transcoder", self.mw)
+        self.mw.act_view_converter = QAction("Converter", self.mw)
+        self.mw.act_transcode = QAction("Transcode", self.mw)
+        self.mw.act_converter_menu = QAction("Converter", self.mw)
+
     def _create_view_menu(self, menubar):
         menu = menubar.addMenu("V&iew")
 

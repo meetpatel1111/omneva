@@ -15,6 +15,25 @@ __pycache__/
 *.manifest
 *.spec
 
+# Omneva specific build outputs
+/portable/
+/installer_output/
+Omneva-Setup-*.exe
+
+# Cross-platform build outputs
+/macos_package/
+/macos_package_cross/
+/linux_package/
+/linux_package_cross/
+/portable_windows/
+*.AppImage
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.AppDir
+appimagetool-*.AppImage
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -94,3 +113,11 @@ debug_vlc_check.py
 test_audio.py
 crash_log.txt
 vlc_debug.log
+
+# Omneva application data and cache
+omneva_thumbnails/
+.omneva/
+*.log
+*.tmp
+temp/
+cache/

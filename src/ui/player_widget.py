@@ -5,15 +5,42 @@ import random
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QSizePolicy, QFileDialog, QGraphicsOpacityEffect,
-    QListView, QAbstractItemView
+    QListView, QTableView, QAbstractItemView, QHeaderView
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve, QThread, QObject
 from PySide6.QtGui import QMouseEvent, QCursor, QIcon
 
 from src.core.vlc_engine import VLCEngine
 from src.core.ffprobe_service import FFprobeService
 from src.core.utils import format_duration, get_icon
 from src.core.playlist_model import PlaylistModel
+from src.core.logger import get_logger
+from src.core.recovery_service import get_recovery_service
+from src.ui.widgets.chapter_slider import ChapterSlider
+
+
+class PlayerFFprobeWorker(QObject):
+    """Worker for running FFprobe operations in PlayerWidget."""
+    
+    metadata_ready = Signal(str, dict)  # path, metadata
+    error_occurred = Signal(str, str)   # path, error_message
+    
+    def __init__(self, ffprobe_service):
+        super().__init__()
+        self.ffprobe = ffprobe_service
+        self._current_path = None
+        
+    def get_metadata(self, path: str):
+        """Get metadata for the given file path."""
+        self._current_path = path
+        try:
+            meta = self.ffprobe.get_metadata(path)
+            if "error" in meta:
+                self.error_occurred.emit(path, meta['error'])
+            else:
+                self.metadata_ready.emit(path, meta)
+        except Exception as e:
+            self.error_occurred.emit(path, str(e))
 
 
 class VideoSurface(QFrame):
@@ -86,11 +113,33 @@ class PlaylistPanel(QWidget):
         header.setFixedHeight(30)
         layout.addWidget(header)
         
-        # List View
-        self.list_view = QListView()
+        # Table View for inline editing support
+        self.list_view = QTableView()
         self.list_view.setObjectName("playlistList")
         self.list_view.setFrameShape(QFrame.NoFrame)
         self.list_view.setAlternatingRowColors(True)
+        self.list_view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.list_view.setSelectionMode(QAbstractItemView.SingleSelection)
+        
+        # Enable editing triggers
+        self.list_view.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
+        
+        # Enable drag and drop
+        self.list_view.setDragEnabled(True)
+        self.list_view.setAcceptDrops(True)
+        self.list_view.setDropIndicatorShown(True)
+        self.list_view.setDragDropMode(QAbstractItemView.InternalMove)
+        self.list_view.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.list_view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        
+        # Hide headers for cleaner look
+        self.list_view.horizontalHeader().hide()
+        self.list_view.verticalHeader().hide()
+        
+        # Make columns fit content
+        self.list_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.list_view.horizontalHeader().setStretchLastSection(True)
+        
         self.list_view.doubleClicked.connect(self._on_item_double_clicked)
         layout.addWidget(self.list_view)
         
@@ -150,9 +199,10 @@ class OverlayControls(QWidget):
         self.btn_adv_frame.setFixedSize(30, 30)
         
         self.btn_adv_loop_ab = QPushButton("AB")
-        self.btn_adv_loop_ab.setToolTip("Loop A-B (Not implemented)")
+        self.btn_adv_loop_ab.setToolTip("Loop A-B: Click to set A point, click again to set B point, click again to disable")
         self.btn_adv_loop_ab.setFixedSize(30, 30)
-        self.btn_adv_loop_ab.setEnabled(False)
+        self.btn_adv_loop_ab.setEnabled(True)
+        self.btn_adv_loop_ab.setCheckable(True)
 
         adv_layout.addStretch()
         adv_layout.addWidget(self.btn_adv_record)
@@ -172,7 +222,7 @@ class OverlayControls(QWidget):
         self.lbl_time.setFixedWidth(55)
         self.lbl_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider = ChapterSlider(Qt.Horizontal)
         self.seek_slider.setObjectName("seekSlider")
         self.seek_slider.setRange(0, 1000)
         self.seek_slider.setValue(0)
@@ -310,6 +360,8 @@ class PlayerWidget(QWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
 
+        self.logger = get_logger('player_widget')
+        self.recovery_service = get_recovery_service()
         self.vlc = VLCEngine()
         self.ffprobe = FFprobeService()
         self.setFocusPolicy(Qt.StrongFocus)
@@ -318,8 +370,21 @@ class PlayerWidget(QWidget):
         self._controls_visible = True
         self._current_file = None
         self._is_fullscreen = False
+        self._current_position = 0.0
+        self._current_volume = 100
 
         self.playlist_model = PlaylistModel()
+        
+        # AB Loop state
+        self._ab_loop_enabled = False
+        self._loop_a_position = -1.0
+        self._loop_b_position = -1.0
+        self._ab_loop_state = "idle"  # idle, set_a, set_b, active
+
+        # FFprobe worker setup (disabled due to QThread destruction issues)
+        self._ffprobe_thread = None
+        self._ffprobe_worker = None
+        self.ffprobe = FFprobeService()
 
         self._setup_ui()
         self._connect_signals()
@@ -367,6 +432,32 @@ class PlayerWidget(QWidget):
         self.playlist_panel.hide() # Hidden by default
         self._main_hbox.addWidget(self.playlist_panel)
 
+    def _on_metadata_ready(self, path: str, meta: dict):
+        """Handle metadata received from FFprobe worker."""
+        try:
+            if "error" not in meta:
+                dur = meta["format"]["duration"]
+                self.controls.lbl_duration.setText(format_duration(dur))
+                
+                # Load chapters into seek slider
+                chapters = meta.get("chapters", [])
+                if chapters:
+                    self.controls.seek_slider.set_chapters(chapters)
+                    self.logger.info(f"Loaded {len(chapters)} chapters for {path}")
+                else:
+                    self.controls.seek_slider.clear_chapters()
+                
+                # Update model with metadata
+                self.playlist_model.update_metadata(path, duration=dur)
+        except Exception as e:
+            self.logger.error(f"Error processing metadata for {path}: {e}")
+
+    def _on_ffprobe_error(self, path: str, error_message: str):
+        """Handle FFprobe error from worker thread."""
+        self.logger.error(f"Error getting metadata for {path}: {error_message}")
+        # Clear chapters on error
+        self.controls.seek_slider.clear_chapters()
+
     def _on_context_menu(self, pos):
         """Emit context menu request with global position."""
         global_pos = self.sender().mapToGlobal(pos)
@@ -392,10 +483,14 @@ class PlayerWidget(QWidget):
         self.controls.btn_prev.clicked.connect(self._play_prev)
         self.controls.btn_next.clicked.connect(self._play_next)
         
+        # FFprobe worker signals (disabled due to threading issues)
+        # All FFprobe operations will use synchronous fallback
+        
         # Advanced Buttons
         self.controls.btn_adv_record.clicked.connect(self._toggle_record)
         self.controls.btn_adv_snapshot.clicked.connect(self.snapshot_requested.emit)
         self.controls.btn_adv_frame.clicked.connect(self.vlc.next_frame)
+        self.controls.btn_adv_loop_ab.clicked.connect(self._toggle_ab_loop)
         
         self.controls.btn_playlist.toggled.connect(self._toggle_playlist_panel)
         self.controls.tracks_menu_requested.connect(self._show_tracks_menu)
@@ -429,15 +524,56 @@ class PlayerWidget(QWidget):
 
     def load_and_play(self, file_path: str):
         """Load a media file and start playing."""
+        # Clear chapters when loading new file
+        self.controls.seek_slider.clear_chapters()
+        
+        # Comprehensive file validation
+        if not file_path:
+            self.logger.warning("Empty file path provided to load_and_play")
+            return
+            
         if not os.path.isfile(file_path):
+            self.logger.warning(f"File not found: {file_path}")
+            self._show_file_error(file_path, "File not found")
+            return
+            
+        # Check if file is readable
+        if not os.access(file_path, os.R_OK):
+            self.logger.error(f"File not readable: {file_path}")
+            self._show_file_error(file_path, "File not readable")
+            return
+            
+        # Check file size (avoid empty files)
+        try:
+            file_size = os.path.getsize(file_path)
+            if file_size == 0:
+                self.logger.warning(f"Empty file: {file_path}")
+                self._show_file_error(file_path, "File is empty")
+                return
+        except OSError as e:
+            self.logger.error(f"Error checking file size for {file_path}: {e}")
+            self._show_file_error(file_path, "Cannot access file")
+            return
+            
+        # Check file extension for supported formats
+        supported_extensions = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', 
+                              '.mp3', '.wav', '.flac', '.ogg', '.aac', '.m4a', '.wma'}
+        file_ext = os.path.splitext(file_path)[1].lower()
+        if file_ext not in supported_extensions:
+            self.logger.warning(f"Unsupported file format: {file_path}")
+            self._show_file_error(file_path, f"Unsupported file format: {file_ext}")
             return
             
         # Add to playlist if not present
         idx = self.playlist_model.add_file(file_path)
             
         self._current_file = file_path
+        self._current_position = 0.0  # Reset position for new file
         self.playlist_model.set_current_index(idx)
         self.playlist_panel.select_row(idx)
+        
+        # Reset AB loop for new file
+        self._reset_ab_loop()
 
         self.video_surface.hide_placeholder()
 
@@ -450,14 +586,24 @@ class PlayerWidget(QWidget):
         basename = os.path.basename(file_path)
         self.title_changed.emit(basename)
         self.controls.lbl_info.setText(basename)
+        
+        # Trigger autosave after loading new file
+        self._autosave_state()
 
-        # Get metadata for duration
-        meta = self.ffprobe.get_metadata(file_path)
-        if "error" not in meta:
-            dur = meta["format"]["duration"]
-            self.controls.lbl_duration.setText(format_duration(dur))
-            # Update model with metadata
-            self.playlist_model.update_metadata(file_path, duration=dur)
+        # Get metadata for duration using threaded worker
+        if self._ffprobe_worker:
+            self._ffprobe_worker.get_metadata(file_path)
+        else:
+            # Fallback to synchronous operation
+            try:
+                meta = self.ffprobe.get_metadata(file_path)
+                if "error" not in meta:
+                    dur = meta["format"]["duration"]
+                    self.controls.lbl_duration.setText(format_duration(dur))
+                    # Update model with metadata
+                    self.playlist_model.update_metadata(file_path, duration=dur)
+            except Exception as e:
+                self.logger.error(f"Error getting metadata for {file_path}: {e}")
             
     def _play_next(self):
         count = self.playlist_model.rowCount()
@@ -496,6 +642,33 @@ class PlayerWidget(QWidget):
     def _toggle_playlist_panel(self, checked):
         self.playlist_panel.setVisible(checked)
 
+    def _show_file_error(self, file_path: str, error_message: str):
+        """Show a user-friendly error message for file loading issues."""
+        from PySide6.QtWidgets import QMessageBox
+        
+        basename = os.path.basename(file_path)
+        QMessageBox.warning(
+            self,
+            "File Error",
+            f"Cannot play file:\n\n{basename}\n\n{error_message}\n\nPlease check that the file exists and is accessible."
+        )
+
+    def _autosave_state(self):
+        """Save current player state for crash recovery."""
+        try:
+            current_state = {
+                'current_file': self._current_file,
+                'current_position': self._current_position,
+                'current_volume': self._current_volume,
+                'playlist_files': [self.playlist_model.get_path(i) for i in range(self.playlist_model.rowCount())],
+                'current_playlist_index': self.playlist_model.get_current_index()
+            }
+            
+            self.recovery_service.autosave_if_needed(current_state)
+            
+        except Exception as e:
+            self.logger.error(f"Player autosave failed: {e}")
+
     def _toggle_play(self):
         self.vlc.toggle_play_pause()
 
@@ -509,6 +682,70 @@ class PlayerWidget(QWidget):
              self.controls.btn_adv_record.setStyleSheet("QPushButton { background-color: #f44336; color: white; border: 1px solid #d32f2f; }")
         else:
              self.controls.btn_adv_record.setStyleSheet("QPushButton { color: #f44336; background-color: transparent; }")
+
+    def _toggle_ab_loop(self):
+        """Toggle AB loop functionality."""
+        if not self._current_file:
+            self._show_info("No media loaded")
+            self.controls.btn_adv_loop_ab.setChecked(False)
+            return
+        
+        current_pos = self._current_position
+        
+        if self._ab_loop_state == "idle":
+            # Set point A
+            self._loop_a_position = current_pos
+            self._loop_b_position = -1.0
+            self._ab_loop_state = "set_a"
+            self._ab_loop_enabled = False
+            self.controls.btn_adv_loop_ab.setChecked(True)
+            self.controls.btn_adv_loop_ab.setStyleSheet("QPushButton { background-color: #2196f3; color: white; border: 1px solid #1976d2; }")
+            self._show_info(f"Loop A set: {self._format_time(current_pos)}")
+            
+        elif self._ab_loop_state == "set_a":
+            # Set point B and enable loop
+            if current_pos > self._loop_a_position:
+                self._loop_b_position = current_pos
+                self._ab_loop_state = "active"
+                self._ab_loop_enabled = True
+                self.controls.btn_adv_loop_ab.setStyleSheet("QPushButton { background-color: #4caf50; color: white; border: 1px solid #388e3c; }")
+                self._show_info(f"Loop B set: {self._format_time(current_pos)} - Looping A→B")
+            else:
+                self._show_info("Point B must be after Point A")
+                # Reset to idle state
+                self._reset_ab_loop()
+                
+        elif self._ab_loop_state == "active":
+            # Disable loop
+            self._reset_ab_loop()
+            self._show_info("AB Loop disabled")
+    
+    def _reset_ab_loop(self):
+        """Reset AB loop state."""
+        self._ab_loop_enabled = False
+        self._loop_a_position = -1.0
+        self._loop_b_position = -1.0
+        self._ab_loop_state = "idle"
+        self.controls.btn_adv_loop_ab.setChecked(False)
+        self.controls.btn_adv_loop_ab.setStyleSheet("QPushButton { color: #666; background-color: transparent; }")
+    
+    def _check_ab_loop(self):
+        """Check if we need to loop back to point A."""
+        if not self._ab_loop_enabled or self._ab_loop_state != "active":
+            return
+        
+        current_pos = self._current_position
+        
+        # If we've passed point B, seek back to point A
+        if current_pos >= self._loop_b_position:
+            self.vlc.set_position(self._loop_a_position)
+            self._show_info(f"Looping: {self._format_time(self._loop_a_position)} → {self._format_time(self._loop_b_position)}")
+    
+    def _format_time(self, seconds):
+        """Format time in seconds to MM:SS format."""
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes:02d}:{secs:02d}"
 
     def set_fullscreen_mode(self, entering: bool):
         """Called by MainWindow when entering/exiting fullscreen."""
@@ -561,6 +798,14 @@ class PlayerWidget(QWidget):
             self.controls.seek_slider.blockSignals(False)
         
         self.controls.lbl_time.setText(format_duration(pos))
+        
+        # Track current position for recovery (update every 5 seconds to avoid too frequent saves)
+        self._current_position = pos
+        if int(pos) % 5 == 0:  # Save position every 5 seconds
+            self._autosave_state()
+        
+        # Check AB loop
+        self._check_ab_loop()
 
     def _on_duration_changed(self, dur: float):
         """Update slider range and duration label."""
@@ -584,6 +829,8 @@ class PlayerWidget(QWidget):
         self.controls.volume_slider.setValue(vol)
         self.controls.volume_slider.blockSignals(False)
         
+        self._current_volume = vol  # Track volume for recovery
+        
         if not self.vlc.is_muted():
             if vol == 0:
                 self.controls.btn_mute.setIcon(get_icon("volume-mute.svg"))
@@ -591,6 +838,9 @@ class PlayerWidget(QWidget):
                 self.controls.btn_mute.setIcon(get_icon("volume-low.svg"))
             else:
                 self.controls.btn_mute.setIcon(get_icon("volume-high.svg"))
+                
+        # Autosave volume changes
+        self._autosave_state()
 
     def _on_mute_changed(self, muted: bool):
         """Update mute button icon when mute state changes."""
@@ -707,6 +957,8 @@ class PlayerWidget(QWidget):
     def _set_speed(self, rate):
         self.vlc.set_rate(rate)
         self.controls.btn_speed.setText(f"{rate}x")
+        # Show speed overlay indicator
+        self._show_info(f"Speed: {rate}x")
 
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts directly in the widget."""
@@ -1020,6 +1272,14 @@ class PlayerWidget(QWidget):
         
         self._info_clear_timer.stop()
         self._info_clear_timer.start(2000)
+
+    def cleanup(self):
+        """Clean up resources including FFprobe thread."""
+        if hasattr(self, '_ffprobe_thread') and self._ffprobe_thread.isRunning():
+            self._ffprobe_thread.quit()
+            self._ffprobe_thread.wait(1000)  # Wait up to 1 second for thread to finish
+        if hasattr(self, 'vlc'):
+            self.vlc.release()
 
 
     def wheelEvent(self, event):

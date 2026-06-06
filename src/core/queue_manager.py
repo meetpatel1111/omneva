@@ -4,6 +4,7 @@ import uuid
 from PySide6.QtCore import QObject, QThread, Signal
 
 from src.core.ffmpeg_service import FFmpegService, TranscodeJob
+from .logger import get_logger
 
 
 class TranscodeWorker(QObject):
@@ -44,6 +45,7 @@ class QueueManager(QObject):
 
     def __init__(self, ffmpeg_service: FFmpegService = None, max_concurrent: int = 1):
         super().__init__()
+        self.logger = get_logger('queue_manager')
         self.ffmpeg = ffmpeg_service or FFmpegService()
         self.max_concurrent = max_concurrent
 
@@ -108,7 +110,7 @@ class QueueManager(QObject):
 
     def _process_next(self):
         """Start next pending job if we have capacity."""
-        print(f"DEBUG: Processing next job. Pending: {len(self._pending)}, Active: {len(self._active_threads)}")
+        self.logger.debug(f"Processing next job. Pending: {len(self._pending)}, Active: {len(self._active_threads)}")
         while self._pending and len(self._active_threads) < self.max_concurrent:
             job_id = self._pending.pop(0)
             job = self._jobs.get(job_id)
@@ -119,7 +121,7 @@ class QueueManager(QObject):
 
     def _start_job(self, job: TranscodeJob):
         """Start a job in a new QThread."""
-        print(f"DEBUG: Starting job {job.id}")
+        self.logger.debug(f"Starting job {job.id}")
         thread = QThread()
         worker = TranscodeWorker(self.ffmpeg, job)
         worker.moveToThread(thread)
@@ -145,7 +147,7 @@ class QueueManager(QObject):
         job.status = "running"
         self.job_started.emit(job.id)
         thread.start()
-        print(f"DEBUG: Thread started for job {job.id}")
+        self.logger.debug(f"Thread started for job {job.id}")
 
     def _on_progress(self, job_id: str, percent: float, speed: str):
         job = self._jobs.get(job_id)

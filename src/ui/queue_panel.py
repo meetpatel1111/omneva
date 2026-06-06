@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
     QFrame, QProgressBar, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal
+from src.core.logger import get_logger
+from src.core.recovery_service import get_recovery_service
 
 
 class JobItem(QFrame):
@@ -75,8 +77,13 @@ class QueuePanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("queuePanel")
+        self.logger = get_logger('queue_panel')
+        self.recovery_service = get_recovery_service()
         self._job_widgets: dict[str, JobItem] = {}
         self._setup_ui()
+        
+        # Setup autosave timer for queue state
+        self._setup_autosave()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -162,7 +169,49 @@ class QueuePanel(QWidget):
         self._update_count()
         if not self._job_widgets:
             self.lbl_empty.show()
+            
+        # Autosave after clearing completed jobs
+        self._autosave_state()
 
     def _update_count(self):
         n = len(self._job_widgets)
         self.lbl_count.setText(f"{n} job{'s' if n != 1 else ''}")
+
+    def _setup_autosave(self):
+        """Setup autosave timer for queue state."""
+        from PySide6.QtCore import QTimer
+        
+        # Autosave every 5 minutes
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave_state)
+        self._autosave_timer.start(300000)  # 5 minutes in milliseconds
+
+    def _autosave_state(self):
+        """Save current queue state for crash recovery."""
+        try:
+            current_state = {
+                'queue_jobs': self._get_job_states(),
+                'job_count': len(self._job_widgets)
+            }
+            
+            self.recovery_service.autosave_if_needed(current_state)
+            
+        except Exception as e:
+            self.logger.error(f"Queue autosave failed: {e}")
+
+    def _get_job_states(self):
+        """Get current job states for recovery."""
+        job_states = []
+        try:
+            for job_id, widget in self._job_widgets.items():
+                job_states.append({
+                    'id': job_id,
+                    'filename': widget.lbl_name.text().replace('📄 ', ''),
+                    'preset': widget.lbl_preset.text(),
+                    'status': widget.lbl_status.text(),
+                    'progress': widget.progress_bar.value(),
+                    'completed': widget.is_completed()
+                })
+        except Exception as e:
+            self.logger.error(f"Failed to get queue job states: {e}")
+        return job_states

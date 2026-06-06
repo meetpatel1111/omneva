@@ -3,27 +3,101 @@
 import json
 import subprocess
 import os
+from functools import lru_cache
+from typing import Optional
 
 from src.core.utils import find_ffprobe, format_duration, format_size, format_bitrate
+from .security import safe_subprocess_run, validate_file_path
+from .logger import get_logger
 
 
 class FFprobeService:
     """Extracts structured metadata from media files using ffprobe."""
 
     def __init__(self):
-        pass
+        self._cache = {}
+        self._cache_max_size = 100  # Maximum number of cached entries
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self.logger = get_logger('ffprobe_service')
 
     @property
     def ffprobe_path(self):
         return find_ffprobe() or "ffprobe"
 
+    def _get_cache_key(self, file_path: str) -> Optional[str]:
+        """Generate cache key based on file path, modification time, and size."""
+        try:
+            if not os.path.isfile(file_path):
+                return None
+            
+            stat = os.stat(file_path)
+            # Use path, mtime, and size as cache key
+            return f"{file_path}:{stat.st_mtime}:{stat.st_size}"
+        except (OSError, AttributeError):
+            return None
+
+    def _get_from_cache(self, cache_key: str) -> Optional[dict]:
+        """Get metadata from cache if available."""
+        result = self._cache.get(cache_key)
+        if result is not None:
+            self._cache_hits += 1
+            self.logger.debug(f"Cache hit for {cache_key}")
+        else:
+            self._cache_misses += 1
+            self.logger.debug(f"Cache miss for {cache_key}")
+        return result
+
+    def _store_in_cache(self, cache_key: str, metadata: dict):
+        """Store metadata in cache with LRU eviction."""
+        # If cache is full, remove the oldest entry (simple LRU)
+        if len(self._cache) >= self._cache_max_size:
+            # Remove the first item (oldest)
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
+            self.logger.debug(f"Cache eviction: removed {oldest_key}")
+        
+        self._cache[cache_key] = metadata
+        self.logger.debug(f"Stored metadata in cache for {cache_key}")
+
+    def clear_cache(self):
+        """Clear all cached metadata."""
+        cache_size = len(self._cache)
+        self._cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self.logger.info(f"Cleared {cache_size} entries from FFprobe cache")
+
+    def get_cache_stats(self) -> dict:
+        """Get cache performance statistics."""
+        total_requests = self._cache_hits + self._cache_misses
+        hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0
+        return {
+            "cache_size": len(self._cache),
+            "max_size": self._cache_max_size,
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "hit_rate_percent": round(hit_rate, 2)
+        }
+
     def get_metadata(self, file_path: str) -> dict:
         """
-        Run ffprobe and return structured metadata.
+        Run ffprobe and return structured metadata with caching.
         Returns dict with format, video streams, audio streams, subtitles, chapters.
         """
         if not os.path.isfile(file_path):
             return {"error": f"File not found: {file_path}"}
+            
+        # Validate file path for security
+        if not validate_file_path(file_path):
+            return {"error": f"Invalid file path: {file_path}"}
+
+        # Check cache first
+        cache_key = self._get_cache_key(file_path)
+        if cache_key:
+            cached_metadata = self._get_from_cache(cache_key)
+            if cached_metadata is not None:
+                return cached_metadata
 
         try:
             cmd = [
@@ -35,7 +109,7 @@ class FFprobeService:
                 "-show_chapters",
                 file_path,
             ]
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -43,11 +117,20 @@ class FFprobeService:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
 
+            if result is None:
+                return {"error": "Command validation failed"}
+                
             if result.returncode != 0:
                 return {"error": f"ffprobe failed: {result.stderr.strip()}"}
 
             data = json.loads(result.stdout)
-            return self._parse_metadata(file_path, data)
+            parsed_metadata = self._parse_metadata(file_path, data)
+            
+            # Store in cache if successful
+            if cache_key and "error" not in parsed_metadata:
+                self._store_in_cache(cache_key, parsed_metadata)
+            
+            return parsed_metadata
 
         except subprocess.TimeoutExpired:
             return {"error": "ffprobe timed out"}

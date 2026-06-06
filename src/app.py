@@ -7,8 +7,7 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt
 
 from src.main_window import MainWindow
-
-
+from src.core.logger import get_logger
 from src.core.utils import get_icon
 
 class OmnevaApp:
@@ -24,6 +23,7 @@ class OmnevaApp:
         self.app.setApplicationName("Omneva")
         self.app.setApplicationVersion("1.0.0")
         self.app.setOrganizationName("Omneva Team")
+        self.logger = get_logger('app')
         
         # Set Window Icon
         self.app.setWindowIcon(get_icon("icon.svg"))
@@ -42,8 +42,17 @@ class OmnevaApp:
         # Check dependencies before creating the main window
         self._check_and_download_dependencies()
 
-        # Create main window
-        self.window = MainWindow()
+        # Try to create main window with VLC fallback
+        try:
+            self.window = MainWindow()
+        except Exception as e:
+            # Check if this is a VLC-related error
+            if "VLC" in str(e) or "vlc" in str(e).lower():
+                self._show_vlc_error_dialog(e)
+                return
+            else:
+                # Re-raise non-VLC errors
+                raise
 
     def _check_and_download_dependencies(self):
         """Check for VLC and FFmpeg. Download if missing."""
@@ -65,6 +74,48 @@ class OmnevaApp:
             dialog.start_download()
             dialog.exec() # Block until downloaded or canceled
 
+    def _show_vlc_error_dialog(self, error):
+        """Show a user-friendly dialog when VLC is not available."""
+        from PySide6.QtWidgets import QMessageBox, QPushButton
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setWindowTitle("VLC Not Available")
+        msg_box.setText("VLC Media Player could not be initialized.")
+        msg_box.setInformativeText(
+            "Omneva requires VLC Media Player for media playback. "
+            "Please install VLC and restart the application."
+        )
+        
+        # Add detailed error information
+        detailed_text = f"Error details:\n{str(error)}\n\n"
+        if sys.platform == "win32":
+            detailed_text += "Download VLC from: https://www.videolan.org/vlc/\n"
+            detailed_text += "Make sure to install the 64-bit version if you're using 64-bit Omneva."
+        elif sys.platform == "darwin":
+            detailed_text += "Install VLC using: brew install vlc\n"
+            detailed_text += "Or download from: https://www.videolan.org/vlc/"
+        else:
+            detailed_text += "Install VLC using your system package manager:\n"
+            detailed_text += "  Ubuntu/Debian: sudo apt install vlc\n"
+            detailed_text += "  Fedora: sudo dnf install vlc\n"
+            detailed_text += "  Arch: sudo pacman -S vlc"
+        
+        msg_box.setDetailedText(detailed_text)
+        
+        # Add a "Download VLC" button
+        download_button = QPushButton("Download VLC")
+        msg_box.addButton(download_button, QMessageBox.ActionRole)
+        msg_box.addButton(QMessageBox.Ok)
+        
+        msg_box.exec()
+        
+        # Handle button clicks
+        if msg_box.clickedButton() == download_button:
+            QDesktopServices.openUrl(QUrl("https://www.videolan.org/vlc/"))
+
     def set_theme(self, theme_name: str):
         """Load a QSS theme file."""
         theme_dir = os.path.join(os.path.dirname(__file__), "styles")
@@ -73,7 +124,7 @@ class OmnevaApp:
             with open(theme_file, "r", encoding="utf-8") as f:
                 self.app.setStyleSheet(f.read())
         else:
-            print(f"[Omneva] Theme file not found: {theme_file}")
+            self.logger.warning(f"Theme file not found: {theme_file}")
 
     def run(self) -> int:
         """Show window and start event loop."""

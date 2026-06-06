@@ -145,6 +145,19 @@ class SummaryTab(QWidget):
         """Update track information label."""
         self.lbl_tracks.setText(f"{video_info}\n{audio_info}")
 
+    def set_loading_state(self, loading: bool):
+        """Show/hide loading state for metadata loading."""
+        if loading:
+            self.lbl_tracks.setText("Loading metadata...")
+            self.lbl_size.setText("Loading...")
+            self.lbl_name.setEnabled(False)
+            self.combo_format.setEnabled(False)
+        else:
+            self.lbl_tracks.setText("No file selected")
+            self.lbl_size.setText("N/A")
+            self.lbl_name.setEnabled(True)
+            self.combo_format.setEnabled(True)
+
     def set_size_info(self, width: int, height: int):
         """Update resolution info."""
         self.lbl_size.setText(f"{width}x{height} storage, {width}x{height} display")

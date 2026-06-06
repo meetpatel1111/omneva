@@ -1,15 +1,19 @@
 """MainWindow — Primary application window with horizontal nav bar."""
 
 import os
+import sys
+from datetime import datetime
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QStackedWidget, QSizePolicy, QFrame, QLabel,
     QMenuBar, QMenu, QFileDialog, QInputDialog, QMessageBox,
-    QApplication,
+    QApplication, QSystemTrayIcon, QMenu, QStyle,
 )
-from PySide6.QtCore import Qt, QSize, QDateTime, QStandardPaths, QSettings
-from PySide6.QtGui import QIcon, QAction, QKeySequence, QClipboard
+from PySide6.QtCore import Qt, QSize, QDateTime, QStandardPaths, QSettings, QEvent
+from PySide6.QtGui import QIcon, QAction, QKeySequence, QClipboard, QPalette
 from src.core.storage import storage
+from src.core.logger import get_logger
+from src.core.recovery_service import get_recovery_service, check_crash_recovery
 from src.ui.titlebar import TitleBar
 from src.ui.player_widget import PlayerWidget
 from src.ui.library_panel import LibraryPanel
@@ -19,6 +23,7 @@ from src.ui.queue_panel import QueuePanel
 from src.ui.settings_dialog import SettingsDialog
 from src.core.history_service import HistoryService
 from src.ui.menus import MenuFactory
+from src.ui.dialogs.snapshot_preview_dialog import SnapshotPreviewDialog
 
 
 class NavButton(QPushButton):
@@ -45,6 +50,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.logger = get_logger('main_window')
         self.setWindowTitle("Omneva")
         self.setMinimumSize(1000, 650)
         self.resize(1280, 800)
@@ -54,17 +60,136 @@ class MainWindow(QMainWindow):
         
         # Use storage-managed settings
         self._settings = storage.get_settings()
+        
+        # Initialize recovery service
+        self.recovery_service = get_recovery_service()
+        self._check_crash_recovery()
 
         self._setup_ui()
         self._connect_signals()
         
-        # Load verified theme or default
-        saved_theme = self._settings.value("theme", "dark")
+        # Auto-detect theme if not previously set
+        if not self._settings.contains("theme"):
+            detected_theme = self._detect_system_theme()
+            self.logger.info(f"Auto-detected system theme: {detected_theme}")
+            saved_theme = detected_theme
+        else:
+            saved_theme = self._settings.value("theme", "dark")
+        
         self._set_theme(saved_theme)
         
         self._history = HistoryService(max_recent=self.MAX_RECENT)
         self._history.history_updated.connect(self._update_recent_menu)
+        
+        # Setup autosave timer
+        self._setup_autosave()
+        
+        # Setup system tray
+        self._setup_system_tray()
+        
+        # Restore window geometry
+        self._restore_geometry()
 
+    def _check_crash_recovery(self):
+        """Check for crash recovery state and prompt user if available."""
+        recovery_state = check_crash_recovery()
+        if recovery_state:
+            self.logger.info(f"Found recovery state from session {recovery_state.session_id}")
+            
+            # Show recovery dialog
+            reply = QMessageBox.question(
+                self,
+                "Crash Recovery",
+                f"Omneva detected a previous session that may have crashed.\n\n"
+                f"Session: {recovery_state.session_id}\n"
+                f"Date: {datetime.fromtimestamp(recovery_state.timestamp).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                f"Would you like to restore your previous session?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                self._restore_recovery_state(recovery_state)
+            else:
+                # Clear the recovery state if user declines
+                self.recovery_service.clear_recovery_state()
+
+    def _restore_recovery_state(self, state):
+        """Restore application state from recovery data."""
+        try:
+            # Restore current page
+            if hasattr(state, 'current_page') and 0 <= state.current_page <= 4:
+                self.stack.setCurrentIndex(state.current_page)
+            
+            # Restore recent files
+            if hasattr(state, 'recent_files') and state.recent_files:
+                for file_path in state.recent_files:
+                    if os.path.exists(file_path):
+                        self._add_to_recent(file_path)
+            
+            # Restore current file if it exists
+            if hasattr(state, 'current_file') and state.current_file and os.path.exists(state.current_file):
+                self.player_page.load_and_play(state.current_file)
+                if hasattr(state, 'current_position') and state.current_position > 0:
+                    # Note: Position restoration would need VLC engine support
+                    pass
+            
+            self.logger.info("Recovery state restored successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to restore recovery state: {e}")
+            QMessageBox.warning(
+                self,
+                "Recovery Failed",
+                "Failed to restore the previous session. Some data may be lost."
+            )
+
+    def _setup_autosave(self):
+        """Setup autosave timer for crash recovery."""
+        from PySide6.QtCore import QTimer
+        
+        # Autosave every 5 minutes
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave_state)
+        self._autosave_timer.start(300000)  # 5 minutes in milliseconds
+
+    def _autosave_state(self):
+        """Save current application state for crash recovery."""
+        try:
+            current_state = {
+                'current_file': getattr(self.player_page, 'current_file', None),
+                'current_position': getattr(self.player_page, 'current_position', 0.0),
+                'current_volume': getattr(self.player_page, 'current_volume', 100),
+                'current_page': self.stack.currentIndex(),
+                'recent_files': self._settings.value("recentFiles", []),
+                'transcoder_jobs': self._get_transcoder_jobs(),
+                'queue_jobs': self._get_queue_jobs()
+            }
+            
+            self.recovery_service.autosave_if_needed(current_state)
+            
+        except Exception as e:
+            self.logger.error(f"Autosave failed: {e}")
+
+    def _get_transcoder_jobs(self):
+        """Get current transcoder jobs for recovery."""
+        job_states = []
+        try:
+            if hasattr(self.transcoder_page, '_get_job_states'):
+                job_states = self.transcoder_page._get_job_states()
+        except Exception as e:
+            self.logger.error(f"Failed to get transcoder jobs: {e}")
+        return job_states
+
+    def _get_queue_jobs(self):
+        """Get current queue jobs for recovery."""
+        job_states = []
+        try:
+            if hasattr(self.queue_page, '_get_job_states'):
+                job_states = self.queue_page._get_job_states()
+        except Exception as e:
+            self.logger.error(f"Failed to get queue jobs: {e}")
+        return job_states
 
     def _setup_ui(self):
         # Central widget
@@ -117,19 +242,219 @@ class MainWindow(QMainWindow):
 
 
     def _set_theme(self, theme_name: str):
-        """Load and apply a QSS theme."""
+        """Load and apply a QSS theme with font scaling."""
         # 1. Update Settings
         self._settings.setValue("theme", theme_name)
         
-        # 2. Load File
+        # 2. Get font scale factor
+        font_scale = self._settings.value("accessibility/font_scale", 1.0, type=float)
+        
+        # 3. Load File
         base_dir = os.path.dirname(__file__)
         theme_file = os.path.join(base_dir, "styles", f"{theme_name}_theme.qss")
         
         if os.path.exists(theme_file):
             with open(theme_file, "r", encoding="utf-8") as f:
-                QApplication.instance().setStyleSheet(f.read())
+                stylesheet = f.read()
+                # Apply font scaling to the stylesheet
+                scaled_stylesheet = self._apply_font_scaling(stylesheet, font_scale)
+                QApplication.instance().setStyleSheet(scaled_stylesheet)
         else:
-            print(f"Theme file not found: {theme_file}")
+            self.logger.warning(f"Theme file not found: {theme_file}")
+        
+        # 4. Apply font scaling to application font
+        self._apply_font_scaling_to_app(font_scale)
+    
+    def _detect_system_theme(self) -> str:
+        """Auto-detect system theme preference (dark/light)."""
+        try:
+            # Method 1: Use QStyleHints (Qt 5.12+)
+            if hasattr(QApplication.styleHints(), 'colorScheme'):
+                color_scheme = QApplication.styleHints().colorScheme()
+                if color_scheme == Qt.ColorScheme.Dark:
+                    return "dark"
+                elif color_scheme == Qt.ColorScheme.Light:
+                    return "light"
+            
+            # Method 2: Windows registry check
+            if IS_WIN:
+                try:
+                    import winreg
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                      r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+                        # 0 = Light, 1 = Dark
+                        apps_use_light_theme = winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
+                        if apps_use_light_theme == 0:
+                            return "dark"
+                        else:
+                            return "light"
+                except (OSError, FileNotFoundError):
+                    pass
+            
+            # Method 3: macOS system appearance
+            elif sys.platform == "darwin":
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.returncode == 0:
+                        if "Dark" in result.stdout:
+                            return "dark"
+                        else:
+                            return "light"
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                    pass
+            
+            # Method 4: Linux/GNOME gsettings
+            elif sys.platform.startswith("linux"):
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    if result.returncode == 0:
+                        theme_name = result.stdout.strip().lower()
+                        if "dark" in theme_name:
+                            return "dark"
+                        else:
+                            return "light"
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                    pass
+            
+            # Method 5: Fallback - try to detect from system palette
+            palette = QApplication.palette()
+            # Check if window background is dark (lower values = darker)
+            window_bg = palette.color(QPalette.Window)
+            text_color = palette.color(QPalette.WindowText)
+            
+            # Calculate luminance (simplified)
+            bg_luminance = (0.299 * window_bg.red() + 0.587 * window_bg.green() + 0.114 * window_bg.blue()) / 255
+            text_luminance = (0.299 * text_color.red() + 0.587 * text_color.green() + 0.114 * text_color.blue()) / 255
+            
+            # If background is darker than text, it's likely a dark theme
+            if bg_luminance < 0.5:
+                return "dark"
+            else:
+                return "light"
+                
+        except Exception as e:
+            self.logger.warning(f"Could not detect system theme: {e}")
+        
+        # Ultimate fallback - use dark theme as default
+        return "dark"
+    
+    def _apply_font_scaling(self, stylesheet: str, scale_factor: float) -> str:
+        """Apply font scaling to a CSS stylesheet."""
+        if scale_factor == 1.0:
+            return stylesheet
+        
+        try:
+            import re
+            
+            # Scale font-size properties
+            def scale_font_size(match):
+                property_name = match.group(1)
+                value = match.group(2)
+                unit = match.group(3) if match.group(3) else ''
+                
+                # Try to parse the numeric value
+                try:
+                    if value.endswith('px'):
+                        base_value = float(value[:-2])
+                        scaled_value = base_value * scale_factor
+                        return f"{property_name}: {scaled_value:.1f}px{unit}"
+                    elif value.endswith('pt'):
+                        base_value = float(value[:-2])
+                        scaled_value = base_value * scale_factor
+                        return f"{property_name}: {scaled_value:.1f}pt{unit}"
+                    elif value.endswith('em'):
+                        base_value = float(value[:-2])
+                        scaled_value = base_value * scale_factor
+                        return f"{property_name}: {scaled_value:.2f}em{unit}"
+                    elif value.endswith('rem'):
+                        base_value = float(value[:-3])
+                        scaled_value = base_value * scale_factor
+                        return f"{property_name}: {scaled_value:.2f}rem{unit}"
+                    else:
+                        # Try to parse as plain number
+                        base_value = float(value)
+                        scaled_value = base_value * scale_factor
+                        return f"{property_name}: {scaled_value:.1f}px{unit}"
+                except ValueError:
+                    return match.group(0)  # Return original if parsing fails
+            
+            # Pattern to match font-size properties
+            font_pattern = re.compile(r'(font-size:\s*)([\d.]+(?:px|pt|em|rem)?)([^;]*)')
+            scaled_stylesheet = font_pattern.sub(scale_font_size, stylesheet)
+            
+            # Also scale font property (shorthand)
+            def scale_font_shorthand(match):
+                font_decl = match.group(0)
+                # Extract font-size from font shorthand
+                font_size_match = re.search(r'([\d.]+(?:px|pt|em|rem))', font_decl)
+                if font_size_match:
+                    original_size = font_size_match.group(1)
+                    try:
+                        if original_size.endswith('px'):
+                            base_value = float(original_size[:-2])
+                            scaled_value = base_value * scale_factor
+                            return font_decl.replace(original_size, f"{scaled_value:.1f}px")
+                        elif original_size.endswith('pt'):
+                            base_value = float(original_size[:-2])
+                            scaled_value = base_value * scale_factor
+                            return font_decl.replace(original_size, f"{scaled_value:.1f}pt")
+                        elif original_size.endswith('em'):
+                            base_value = float(original_size[:-2])
+                            scaled_value = base_value * scale_factor
+                            return font_decl.replace(original_size, f"{scaled_value:.2f}em")
+                        elif original_size.endswith('rem'):
+                            base_value = float(original_size[:-3])
+                            scaled_value = base_value * scale_factor
+                            return font_decl.replace(original_size, f"{scaled_value:.2f}rem")
+                    except ValueError:
+                        pass
+                return font_decl
+            
+            font_shorthand_pattern = re.compile(r'font:\s*[^;]+;')
+            scaled_stylesheet = font_shorthand_pattern.sub(scale_font_shorthand, scaled_stylesheet)
+            
+            return scaled_stylesheet
+            
+        except Exception as e:
+            self.logger.error(f"Error applying font scaling: {e}")
+            return stylesheet
+    
+    def _apply_font_scaling_to_app(self, scale_factor: float):
+        """Apply font scaling to the application's default font."""
+        try:
+            app = QApplication.instance()
+            if app:
+                font = app.font()
+                current_size = font.pointSizeF()
+                if current_size > 0:
+                    scaled_size = current_size * scale_factor
+                    font.setPointSizeF(scaled_size)
+                    app.setFont(font)
+                    self.logger.debug(f"Applied font scaling: {scale_factor:.2f}x (size: {current_size:.1f} -> {scaled_size:.1f})")
+        except Exception as e:
+            self.logger.error(f"Error applying font scaling to app: {e}")
+    
+    def set_font_scale(self, scale_factor: float):
+        """Set the font scale factor and update the UI."""
+        # Validate scale factor (0.5 to 2.0)
+        scale_factor = max(0.5, min(2.0, scale_factor))
+        
+        # Save to settings
+        self._settings.setValue("accessibility/font_scale", scale_factor)
+        
+        # Reapply current theme with new font scaling
+        current_theme = self._settings.value("theme", "dark")
+        self._set_theme(current_theme)
+        
+        self.logger.info(f"Font scale set to {scale_factor:.2f}x")
 
 
     def _connect_signals(self):
@@ -229,6 +554,19 @@ class MainWindow(QMainWindow):
         self.act_status_bar.triggered.connect(self._toggle_status_bar)
         self.act_toggle_autoscale.triggered.connect(self.player_page.vlc.toggle_autoscale)
 
+        # Missing actions for context menu
+        self.act_view_player = QAction("Player", self)
+        self.act_view_player.triggered.connect(lambda: self._navigate(self.PAGE_PLAYER))
+        self.act_view_library = QAction("Library", self)
+        self.act_view_library.triggered.connect(lambda: self._navigate(self.PAGE_LIBRARY))
+        self.act_view_transcoder = QAction("Transcoder", self)
+        self.act_view_transcoder.triggered.connect(lambda: self._navigate(self.PAGE_TRANSCODER))
+        self.act_view_converter = QAction("Converter", self)
+        self.act_view_converter.triggered.connect(lambda: self._navigate(self.PAGE_CONVERTER))
+        self.act_transcode = QAction("Transcoder", self)
+        self.act_transcode.triggered.connect(lambda: self._navigate(self.PAGE_TRANSCODER))
+        self.act_converter_menu = QAction("Converter", self)
+        self.act_converter_menu.triggered.connect(lambda: self._navigate(self.PAGE_CONVERTER))
 
         # History shortcuts
         self.act_history_back = QAction(self)
@@ -340,17 +678,6 @@ class MainWindow(QMainWindow):
         self._quit_at_end = self.act_quit_end.isChecked()
 
 
-    def _exit_fullscreen(self):
-        """Leave fullscreen — restore chrome."""
-        self._is_fullscreen = False
-        self.titlebar.show()
-        self.menubar.show()
-        if self.act_status_bar.isChecked():
-            self.statusbar.show()
-        central = self.centralWidget()
-        central.setStyleSheet("")
-        self.player_page.set_fullscreen_mode(False)
-        self.showNormal()
 
     def _resize_window(self, scale: float):
         """Resize window based on current video size and scale factor."""
@@ -398,21 +725,6 @@ class MainWindow(QMainWindow):
         self.player_page.load_and_play(media)
         self.player_page._show_info("History Forward")
 
-    def _open_folder(self):
-
-        """Open a folder and play the first media file found."""
-        folder = QFileDialog.getExistingDirectory(self, "Open Folder")
-        if folder:
-            import os
-            media_exts = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv',
-                          '.webm', '.m4v', '.mp3', '.flac', '.wav', '.aac',
-                          '.ogg', '.wma', '.m4a', '.opus')
-            for f in sorted(os.listdir(folder)):
-                if f.lower().endswith(media_exts):
-                    self._play_media(os.path.join(folder, f))
-                    break
-
-
     def keyPressEvent(self, event):
         """Escape exits fullscreen."""
         if event.key() == Qt.Key_Escape and self._is_fullscreen:
@@ -424,64 +736,13 @@ class MainWindow(QMainWindow):
                 return
         super().keyPressEvent(event)
 
-    # ─── Resize grip (bottom-right corner) ──────────────────
-    def mousePressEvent(self, event):
-        if event.position().x() > self.width() - 10 and event.position().y() > self.height() - 10:
-            self._resize_drag = True
-            self._resize_start = event.globalPosition().toPoint()
-            self._resize_size = self.size()
-        else:
-            self._resize_drag = False
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if getattr(self, '_resize_drag', False):
-            delta = event.globalPosition().toPoint() - self._resize_start
-            new_w = max(self.minimumWidth(), self._resize_size.width() + delta.x())
-            new_h = max(self.minimumHeight(), self._resize_size.height() + delta.y())
-            self.resize(new_w, new_h)
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        self._resize_drag = False
-        super().mouseReleaseEvent(event)
-
     def _on_clear_playlist_triggered(self):
         """Handle Ctrl+W: Clear playlist."""
         if hasattr(self.library_page, 'playlist_view'):
              self.library_page.playlist_view._clear_playlist()
         self.player_page._show_info("Playlist Cleared")
 
-    def _add_to_recent(self, file_path: str):
-        """Add to recent files via discovery/direct call."""
-        self._history.add_media(file_path, push_history=False)
-
-    def _update_recent_menu(self):
-        """Rebuild the Recent Media submenu."""
-        self.act_recent_menu.clear()
-        recent = self._history.get_recent()
-        
-        if not recent:
-            self.act_recent_menu.addAction("(No recent files)").setEnabled(False)
-            return
-            
-        for filepath in recent:
-            display = os.path.basename(filepath)
-            action = self.act_recent_menu.addAction(display)
-            action.triggered.connect(lambda checked, p=filepath: self._play_recent(p))
-            
-        self.act_recent_menu.addSeparator()
-        self.act_recent_menu.addAction("Clear Recent", self._clear_recent)
-
-    def _play_recent(self, file_path: str):
-        """Play a file from recent media."""
-        self._play_media(file_path)
-
-
-    def _clear_recent(self):
-        """Clear recent files list."""
-        self._history.clear_recent()
-
+    
     # ─── Dynamic Audio/Subtitle Track Menus ──────────────────
 
     def _populate_audio_tracks(self):
@@ -571,10 +832,6 @@ class MainWindow(QMainWindow):
         visible = self.act_advanced_controls.isChecked()
         self.player_page.set_advanced_visible(visible)
         
-    def _update_title(self, title: str):
-        """Update window title."""
-        self.titlebar.set_title(f"Omneva - {title}")
-
     def toggle_video_fullscreen(self):
         """Toggle fullscreen mode for the player."""
         if self._is_fullscreen:
@@ -597,69 +854,33 @@ class MainWindow(QMainWindow):
             self.player_page.vlc.seek(float(seconds))
 
     def _take_snapshot(self):
-        """Take a snapshot of the current video frame."""
+        """Take a snapshot of the current video frame and show preview."""
         pictures_dir = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
         timestamp = QDateTime.currentDateTime().toString("yyyyMMdd_HHmmss")
         filename = f"omneva_snapshot_{timestamp}.png"
         path = f"{pictures_dir}/{filename}"
         
-        # Use player call if simpler, but MainWindow handles path logic well
-        # vlc.take_snapshot(path, w, h)
+        # Take the snapshot
         if self.player_page.vlc.take_snapshot(path, 0, 0):
-             QMessageBox.information(self, "Snapshot", f"Saved to:\n{path}")
+            # Show preview dialog
+            self._show_snapshot_preview(path)
         else:
-             # Just in case
-             pass
-
-    def _show_context_menu(self, global_pos):
-        """Show context menu for player."""
-        menu = QMenu(self)
+            # Just in case
+            pass
+    
+    def _show_snapshot_preview(self, snapshot_path: str):
+        """Show the snapshot preview dialog."""
+        # Create dialog if not exists
+        if not hasattr(self, '_snapshot_preview_dialog') or not self._snapshot_preview_dialog:
+            self._snapshot_preview_dialog = SnapshotPreviewDialog(self)
         
-        # Playback controls
-        if self.player_page.vlc.is_playing():
-            menu.addAction(self.act_play_pause)
-        else:
-            menu.addAction(self.act_play_pause)
-            
-        menu.addAction(self.act_stop)
-        menu.addSeparator()
+        # Show the snapshot
+        self._snapshot_preview_dialog.show_snapshot(snapshot_path)
         
-        # Tracks
-        # We can add the existing submenus if they are QMenus
-        # But act_audio_track_menu is a QMenu added to menubar
-        # We can create new submenus or reuse actions?
-        # Reusing actions is safer.
-        
-        a_menu = menu.addMenu("Audio Tracks")
-        tracks = self.player_page.vlc.get_audio_tracks()
-        if not tracks:
-            a_menu.addAction("(No audio tracks)").setEnabled(False)
-        else:
-            # Fix: iterate items()
-            for tid, name in tracks.items():
-                act = a_menu.addAction(name)
-                act.setCheckable(True)
-                act.triggered.connect(lambda checked, t=tid: self.player_page.vlc.set_audio_track(t))
-
-        s_menu = menu.addMenu("Subtitle Tracks")
-        subs = self.player_page.vlc.get_subtitle_tracks()
-        if not subs:
-            s_menu.addAction("(No subtitle tracks)").setEnabled(False)
-        else:
-            # Fix: iterate items()
-            for tid, name in subs.items():
-                act = s_menu.addAction(name)
-                act.setCheckable(True)
-                act.triggered.connect(lambda checked, t=tid: self.player_page.vlc.set_subtitle_track(t))
-                
-        menu.addSeparator()
-        menu.addAction(self.act_fullscreen)
-        menu.addAction(self.act_screenshot)
-        menu.addSeparator()
-        menu.addAction(self.act_media_info)
-        menu.addAction(self.act_codec_info)
-        
-        menu.exec(global_pos)
+        # Show the dialog
+        self._snapshot_preview_dialog.show()
+        self._snapshot_preview_dialog.raise_()
+        self._snapshot_preview_dialog.activateWindow()
 
     def _show_media_info(self):
         """Show media info dialog with FFprobe data."""
@@ -711,24 +932,7 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(self, "Codec Information", "\n".join(lines))
 
-    def _show_about(self):
-        """Show About dialog."""
-        QMessageBox.about(
-            self,
-            "About Omneva",
-            "<h3>Omneva v1.0.0</h3>"
-            "<p>A native, modern media player and transcoder.</p>"
-            "<p>Built with Python, PySide6, and VLC.</p>"
-            "<p>© 2025 Omneva Team</p>"
-        )
 
-    def _check_updates(self):
-        """Check for updates dialog."""
-        QMessageBox.information(
-            self, "Check for Updates",
-            "You are running Omneva v1.0.0.\n\n"
-            "No updates available. You're on the latest version!"
-        )
 
     def _show_shortcuts(self):
         """Show keyboard shortcuts dialog."""
@@ -775,11 +979,6 @@ class MainWindow(QMainWindow):
         """
         QMessageBox.information(self, "Keyboard Shortcuts", html)
 
-    def _show_preferences(self):
-        """Show settings dialog."""
-        dlg = SettingsDialog(self)
-        if dlg.exec_():
-            pass
 
     def _show_context_menu(self, pos):
         """Show VLC-style right-click context menu."""
@@ -1216,8 +1415,199 @@ class MainWindow(QMainWindow):
                 act.setCheckable(True)
                 act.triggered.connect(lambda checked, n=name: self.player_page.vlc.set_renderer(n))
 
+    def _save_geometry(self):
+        """Save window geometry and splitter states to settings."""
+        try:
+            # Save window geometry and state
+            self._settings.setValue("window/geometry", self.saveGeometry())
+            self._settings.setValue("window/state", self.saveState())
+            
+            # Save window position and size
+            self._settings.setValue("window/pos", self.pos())
+            self._settings.setValue("window/size", self.size())
+            
+            # Save maximized state
+            self._settings.setValue("window/maximized", self.isMaximized())
+            
+            # Save fullscreen state
+            self._settings.setValue("window/fullscreen", self._is_fullscreen)
+            
+            self.logger.debug("Window geometry saved")
+        except Exception as e:
+            self.logger.error(f"Error saving window geometry: {e}")
+    
+    def _restore_geometry(self):
+        """Restore window geometry and splitter states from settings."""
+        try:
+            # Restore window geometry and state
+            geometry = self._settings.value("window/geometry")
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            # Restore window state
+            state = self._settings.value("window/state")
+            if state:
+                self.restoreState(state)
+            
+            # Restore position and size as fallback
+            if not geometry:
+                pos = self._settings.value("window/pos")
+                size = self._settings.value("window/size")
+                if pos:
+                    self.move(pos)
+                if size:
+                    self.resize(size)
+            
+            # Restore maximized state
+            maximized = self._settings.value("window/maximized", False, type=bool)
+            if maximized:
+                self.showMaximized()
+            
+            # Restore fullscreen state
+            fullscreen = self._settings.value("window/fullscreen", False, type=bool)
+            if fullscreen:
+                self._toggle_fullscreen()
+            
+            self.logger.debug("Window geometry restored")
+        except Exception as e:
+            self.logger.error(f"Error restoring window geometry: {e}")
+
+    def _setup_system_tray(self):
+        """Setup system tray icon with play/pause/stop/quit actions."""
+        try:
+            # Check if system tray is available
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                self.logger.info("System tray is not available on this system")
+                return
+            
+            # Create system tray icon
+            self.tray_icon = QSystemTrayIcon(self)
+            
+            # Create tray menu
+            self.tray_menu = QMenu()
+            
+            # Play/Pause action
+            self.tray_play_pause = QAction("Play", self)
+            self.tray_play_pause.triggered.connect(self._tray_play_pause)
+            self.tray_menu.addAction(self.tray_play_pause)
+            
+            # Stop action
+            self.tray_stop = QAction("Stop", self)
+            self.tray_stop.triggered.connect(self._tray_stop)
+            self.tray_menu.addAction(self.tray_stop)
+            
+            # Separator
+            self.tray_menu.addSeparator()
+            
+            # Show/Hide action
+            self.tray_show_hide = QAction("Show Omneva", self)
+            self.tray_show_hide.triggered.connect(self._tray_show_hide)
+            self.tray_menu.addAction(self.tray_show_hide)
+            
+            # Separator
+            self.tray_menu.addSeparator()
+            
+            # Quit action
+            self.tray_quit = QAction("Quit", self)
+            self.tray_quit.triggered.connect(self._tray_quit)
+            self.tray_menu.addAction(self.tray_quit)
+            
+            # Set tray menu
+            self.tray_icon.setContextMenu(self.tray_menu)
+            
+            # Set tray icon (use application icon or create a simple one)
+            try:
+                # Try to load application icon
+                icon_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'icon.png')
+                if os.path.exists(icon_path):
+                    self.tray_icon.setIcon(QIcon(icon_path))
+                else:
+                    # Create a simple text-based icon as fallback
+                    self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+            except Exception as e:
+                self.logger.warning(f"Could not load tray icon: {e}")
+                # Use standard media icon as fallback
+                self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+            
+            # Set tooltip
+            self.tray_icon.setToolTip("Omneva Media Player")
+            
+            # Connect double-click to show/hide window
+            self.tray_icon.activated.connect(self._tray_activated)
+            
+            # Show tray icon
+            self.tray_icon.show()
+            
+            # Enable minimize to tray behavior
+            self._minimize_to_tray = self._settings.value("system_tray/minimize_to_tray", True, type=bool)
+            
+            self.logger.info("System tray initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error setting up system tray: {e}")
+
+    def _tray_play_pause(self):
+        """Handle play/pause action from tray menu."""
+        if hasattr(self.player_page, 'vlc') and self.player_page.vlc:
+            if self.player_page.vlc.is_playing():
+                self.player_page.vlc.pause()
+                self.tray_play_pause.setText("Play")
+            else:
+                self.player_page.vlc.play()
+                self.tray_play_pause.setText("Pause")
+    
+    def _tray_stop(self):
+        """Handle stop action from tray menu."""
+        if hasattr(self.player_page, 'vlc') and self.player_page.vlc:
+            self.player_page.vlc.stop()
+            self.tray_play_pause.setText("Play")
+    
+    def _tray_show_hide(self):
+        """Show or hide the main window."""
+        if self.isVisible():
+            self.hide()
+            self.tray_show_hide.setText("Show Omneva")
+        else:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            self.tray_show_hide.setText("Hide Omneva")
+    
+    def _tray_quit(self):
+        """Quit application from tray menu."""
+        QApplication.quit()
+    
+    def _tray_activated(self, reason):
+        """Handle tray icon activation (double-click, etc.)."""
+        if reason == QSystemTrayIcon.DoubleClick:
+            self._tray_show_hide()
+        elif reason == QSystemTrayIcon.Trigger:
+            # Single click - could be used for different behavior
+            pass
+    
+    def changeEvent(self, event):
+        """Handle window state changes for tray behavior."""
+        if event.type() == QEvent.WindowStateChange:
+            # Update tray menu text based on window visibility
+            if self.isVisible():
+                self.tray_show_hide.setText("Hide Omneva")
+            else:
+                self.tray_show_hide.setText("Show Omneva")
+        
+        # Handle minimize to tray
+        if event.type() == QEvent.WindowStateChange and self._minimize_to_tray:
+            if self.isMinimized():
+                event.ignore()
+                self.hide()
+                return
+        
+        super().changeEvent(event)
+
     def closeEvent(self, event):
         """Stop discovery and cleanup on close."""
+        # Save window geometry before closing
+        self._save_geometry()
+        
         self.player_page.vlc.stop_renderer_discovery()
         super().closeEvent(event)
 

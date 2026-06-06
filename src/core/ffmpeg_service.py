@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from src.core.utils import find_ffmpeg
+from .security import safe_subprocess_popen, safe_subprocess_run, validate_file_path
 
 
 @dataclass
@@ -660,6 +661,17 @@ class FFmpegService:
         Run a transcode/convert job synchronously (call from QThread).
         on_progress(percent, speed_str) called periodically.
         """
+        # Validate input and output paths for security
+        if not validate_file_path(job.input_path):
+            job.status = "failed"
+            job.error = f"Invalid input path: {job.input_path}"
+            return job
+            
+        if not validate_file_path(job.output_path):
+            job.status = "failed"
+            job.error = f"Invalid output path: {job.output_path}"
+            return job
+        
         preset_key = job.options.get("preset")
         custom_args = job.options.get("custom_args", [])
 
@@ -684,13 +696,18 @@ class FFmpegService:
             job.status = "running"
             creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
-            proc = subprocess.Popen(
+            proc = safe_subprocess_popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,  # Merge stderr to avoid deadlock
                 universal_newlines=True,
                 creationflags=creation_flags,
             )
+            if proc is None:
+                job.status = "failed"
+                job.error = "Command validation failed"
+                return job
+                
             job.process = proc
             self._active_processes[job.id] = proc
 
@@ -723,10 +740,6 @@ class FFmpegService:
                     status = line.split("=")[1]
                     if status == "end":
                         job.progress = 100.0
-
-                if on_progress and duration > 0:
-                    on_progress(job.progress, speed)
-
 
                 if on_progress and duration > 0:
                     on_progress(job.progress, speed)
@@ -791,6 +804,10 @@ class FFmpegService:
         width: int = 320,
     ) -> bool:
         """Generate a thumbnail at a specific timestamp."""
+        # Validate paths for security
+        if not validate_file_path(input_path) or not validate_file_path(output_path):
+            return False
+            
         cmd = [
             self.ffmpeg_path, "-y",
             "-ss", str(timestamp),
@@ -800,12 +817,12 @@ class FFmpegService:
             output_path,
         ]
         try:
-            result = subprocess.run(
+            result = safe_subprocess_run(
                 cmd,
                 capture_output=True,
                 timeout=15,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
-            return result.returncode == 0
+            return result is not None and result.returncode == 0
         except Exception:
             return False

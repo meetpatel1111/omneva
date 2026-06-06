@@ -12,6 +12,8 @@ from src.core.ffprobe_service import FFprobeService
 from src.core.queue_manager import QueueManager
 from src.core.storage import storage
 from src.core.utils import is_media_file
+from src.core.logger import get_logger
+from src.core.recovery_service import get_recovery_service
 
 
 # Quick conversion targets
@@ -79,16 +81,21 @@ class ConverterPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("converterPanel")
+        self.logger = get_logger('converter_panel')
 
         self.settings = storage.get_settings()
         self.ffmpeg = FFmpegService()
         self.ffprobe = FFprobeService()
         self.queue = QueueManager(self.ffmpeg)
+        self.recovery_service = get_recovery_service()
         self._input_files: list[str] = []
 
         self._setup_ui()
         self._load_defaults()
         self._connect_signals()
+        
+        # Setup autosave timer for converter state
+        self._setup_autosave()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -194,6 +201,49 @@ class ConverterPanel(QWidget):
         path = QFileDialog.getExistingDirectory(self, "Select Output Folder")
         if path:
             self.output_edit.setText(path)
+
+    def _setup_autosave(self):
+        """Setup autosave timer for converter state."""
+        from PySide6.QtCore import QTimer
+        
+        # Autosave every 5 minutes
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave_state)
+        self._autosave_timer.start(300000)  # 5 minutes in milliseconds
+
+    def _autosave_state(self):
+        """Save current converter state for crash recovery."""
+        try:
+            current_state = {
+                'input_files': self._input_files,
+                'selected_format': self.format_combo.currentText(),
+                'output_directory': self.output_edit.text(),
+                'converter_jobs': self._get_job_states()
+            }
+            
+            self.recovery_service.autosave_if_needed(current_state)
+            
+        except Exception as e:
+            self.logger.error(f"Converter autosave failed: {e}")
+
+    def _get_job_states(self):
+        """Get current job states for recovery."""
+        job_states = []
+        try:
+            # Get jobs from queue manager
+            if hasattr(self.queue, '_jobs'):
+                for job_id, job in self.queue._jobs.items():
+                    job_states.append({
+                        'id': job_id,
+                        'input_path': job.input_path,
+                        'output_path': job.output_path,
+                        'status': job.status,
+                        'progress': job.progress,
+                        'options': job.options
+                    })
+        except Exception as e:
+            self.logger.error(f"Failed to get converter job states: {e}")
+        return job_states
 
     def _start_conversion(self):
         if not self._input_files:

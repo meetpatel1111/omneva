@@ -3,8 +3,9 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QFormLayout, QDialogButtonBox,
-    QGroupBox
+    QGroupBox, QSlider, QSpinBox
 )
+from PySide6.QtCore import Qt
 from src.core.storage import storage
 
 class SettingsDialog(QDialog):
@@ -72,6 +73,33 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(defaults_group)
 
+        # ─── Accessibility ───────────────────────────────────
+        accessibility_group = QGroupBox("Accessibility")
+        a_form = QFormLayout(accessibility_group)
+
+        # Font Scaling
+        font_scale_layout = QHBoxLayout()
+        self.slider_font_scale = QSlider(Qt.Horizontal)
+        self.slider_font_scale.setRange(50, 200)  # 0.5x to 2.0x
+        self.slider_font_scale.setValue(100)  # Default 1.0x
+        self.slider_font_scale.setTickPosition(QSlider.TicksBelow)
+        self.slider_font_scale.setTickInterval(25)
+        self.slider_font_scale.valueChanged.connect(self._on_font_scale_changed)
+        
+        self.lbl_font_scale_value = QLabel("100%")
+        self.lbl_font_scale_value.setMinimumWidth(40)
+        self.lbl_font_scale_value.setAlignment(Qt.AlignCenter)
+        
+        font_scale_layout.addWidget(self.slider_font_scale)
+        font_scale_layout.addWidget(self.lbl_font_scale_value)
+        font_scale_layout.addWidget(QLabel("(0.5x - 2.0x)"))
+        
+        a_form.addRow("Font Scale:", font_scale_layout)
+        
+        # High Contrast Mode
+        # This could be expanded later with more accessibility options
+        layout.addWidget(accessibility_group)
+
         # ─── Buttons ────────────────────────────────────────
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -98,6 +126,12 @@ class SettingsDialog(QDialog):
         self.txt_output_dir.setText(self.settings.value("default_output_dir", ""))
         self.txt_audio_codec.setText(self.settings.value("default_audio_codec", ""))
         self.txt_video_codec.setText(self.settings.value("default_video_codec", ""))
+        
+        # Load font scale setting
+        font_scale = self.settings.value("accessibility/font_scale", 1.0, type=float)
+        font_scale_percent = int(font_scale * 100)
+        self.slider_font_scale.setValue(font_scale_percent)
+        self.lbl_font_scale_value.setText(f"{font_scale_percent}%")
 
     def _save_settings(self):
         self.settings.setValue("ffmpeg_path", self.txt_ffmpeg.text())
@@ -105,4 +139,22 @@ class SettingsDialog(QDialog):
         self.settings.setValue("default_output_dir", self.txt_output_dir.text())
         self.settings.setValue("default_audio_codec", self.txt_audio_codec.text())
         self.settings.setValue("default_video_codec", self.txt_video_codec.text())
+        
+        # Save font scale setting
+        font_scale = self.slider_font_scale.value() / 100.0
+        self.settings.setValue("accessibility/font_scale", font_scale)
+        
+        # Apply font scale to the main window
+        if self.parent() and hasattr(self.parent(), 'set_font_scale'):
+            self.parent().set_font_scale(font_scale)
+        
         self.accept()
+    
+    def _on_font_scale_changed(self, value):
+        """Handle font scale slider change."""
+        self.lbl_font_scale_value.setText(f"{value}%")
+        
+        # Apply font scale in real-time for preview
+        if self.parent() and hasattr(self.parent(), 'set_font_scale'):
+            font_scale = value / 100.0
+            self.parent().set_font_scale(font_scale)

@@ -5,6 +5,12 @@ import os
 import vlc
 
 from PySide6.QtCore import QObject, Signal, QTimer
+from .logger import get_logger
+
+
+class VLCNotAvailableError(Exception):
+    """Raised when VLC cannot be initialized."""
+    pass
 
 
 class VLCEngine(QObject):
@@ -23,6 +29,7 @@ class VLCEngine(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.logger = get_logger('vlc_engine')
 
         # Add VLC to DLL search path on Windows
         vlc_path = self._find_vlc_path()
@@ -61,10 +68,10 @@ class VLCEngine(QObject):
                 basic_args = ["--no-xlib", "--quiet"]
                 self.instance = vlc.Instance(basic_args)
                 if self.instance is None:
-                    raise Exception("Failed to create VLC instance with basic args")
+                    raise VLCNotAvailableError("Failed to create VLC instance with basic args")
         except Exception as e:
-            print(f"VLC instance creation failed: {e}")
-            raise
+            self.logger.error(f"VLC instance creation failed: {e}")
+            raise VLCNotAvailableError(f"VLC is not available: {e}")
         
         self.player = self.instance.media_player_new()
         
@@ -77,10 +84,17 @@ class VLCEngine(QObject):
         self._duration = 0.0
         self._last_state = "stopped"
 
-        # Poll timer for position updates (VLC doesn't have native signals)
+        # Event manager for native VLC events (will be set up when player is ready)
+        self._event_manager = None
+        
+        # Poll timer for position updates (reduced frequency with events)
         self._poll_timer = QTimer(self)
-        self._poll_timer.setInterval(250)  # 4 updates/sec
+        self._poll_timer.setInterval(1000)  # Reduced to 1 update/sec when using events
         self._poll_timer.timeout.connect(self._poll_state)
+        
+        # Event handling flags (disabled temporarily due to VLC API issues)
+        self._events_enabled = False
+        self._last_position_update = 0
 
         self._audio_delay = 0 # in ms
         self._spu_delay = 0 # in ms
@@ -153,13 +167,20 @@ class VLCEngine(QObject):
             self.player.set_media(self.media)
             
         self.player.play()
+        
+        # Setup event handlers for native VLC events
+        if self._events_enabled:
+            self._setup_event_handlers()
+        
         self._poll_timer.start()
         self.state_changed.emit("playing")
 
     def pause(self):
-        """Toggle pause."""
+        """Pause playback."""
         self.player.pause()
-        if self.player.is_playing():
+        # Check state after pause to ensure correct UI update
+        state = self.player.get_state()
+        if state == vlc.State.Playing:
             self.state_changed.emit("playing")
         else:
             self.state_changed.emit("paused")
@@ -175,13 +196,17 @@ class VLCEngine(QObject):
         """Toggle between play and pause."""
         state = self.player.get_state()
         if state == vlc.State.Playing:
-            self.pause()
+            # Currently playing, so pause
+            self.player.pause()
+            self.state_changed.emit("paused")
         elif state in (vlc.State.Paused, vlc.State.Stopped, vlc.State.Ended):
+            # Currently paused/stopped/ended, so play
             if state == vlc.State.Ended and self._current_file:
                 self.play(self._current_file)
             else:
                 self.play()
         elif self._current_file:
+            # No state but we have a file, try to play
             self.play(self._current_file)
 
     # ─── Seeking ────────────────────────────────────────────
@@ -450,10 +475,6 @@ class VLCEngine(QObject):
         self.player.video_set_crop_geometry(geom.encode())
         return f"Crop {side.capitalize()}: {getattr(self, f'_crop_{side}')}px"
 
-        w = self.player.video_get_width()
-        h = self.player.video_get_height()
-        return w, h
-
     # ─── Bookmarks ──────────────────────────────────────────
 
     def set_bookmark(self, index: int):
@@ -472,9 +493,6 @@ class VLCEngine(QObject):
         return self._bookmarks.get(index)
 
 
-
-    def is_muted(self) -> bool:
-        return bool(self.player.audio_get_mute())
 
     # ─── Chapters / Titles ──────────────────────────────────
 
@@ -874,9 +892,6 @@ class VLCEngine(QObject):
         self._spu_sync_bookmark = None
         return 0
 
-        """Set int adjust option (Hue)."""
-        self.player.video_set_adjust_int(option_id, value)
-
     # ─── Audio Equalizer ────────────────────────────────────
 
     def setup_equalizer(self):
@@ -1066,13 +1081,6 @@ class VLCEngine(QObject):
             self.set_rotate(-2)
         else:
             self.set_rotate(0)
-
-
-    def set_equalizer_preset(self, index: int):
-        """Apply a preset by index."""
-        # Create new equalizer from preset
-        self.equalizer = vlc.AudioEqualizer.new_from_preset(index)
-        self.player.set_equalizer(self.equalizer)
 
 
     def set_rate(self, rate: float):
@@ -1290,7 +1298,7 @@ class VLCEngine(QObject):
             return result
 
         except Exception as e:
-            # print(f"Error in manual tracks info: {e}")
+            self.logger.debug(f"Error in manual tracks info: {e}")
             return []
 
     def get_stats(self):
@@ -1453,18 +1461,8 @@ class VLCEngine(QObject):
 
     # ─── Video Effects (Extended) ───────────────────────────
 
-    def set_crop(self, top=0, left=0, bottom=0, right=0):
-        """Set video crop borders (pixels)."""
-        # video_set_crop_border is not always exposed in binding, checking...
-        # If not, we might use string geometry '100x100+10+10' via video_set_crop_geometry
-        # But let's try direct border if available, else geometry is harder to calc from borders without knowing src size.
-        # Actually standard VLC crop is geometry.
-        # Let's try to find an API or valid geometry string. 
-        # For now, stub or basic geometry string if we knew size. 
-        # Wait, libvlc_video_set_crop_geometry takes a string like "100x100+0+0".
-        # This crop UI is "pixels from border". That's distinct.
-        # There isn't a direct "crop border" API in standard python-vlc.
-        # We will stub this for now or print log.
+    def set_crop_borders(self, top=0, left=0, bottom=0, right=0):
+        """Set video crop borders (pixels). (Stub – not yet implemented)"""
         pass
 
     # vlc.VideoLogoOption enums (Hardcoded to avoid AttributeError if vlc module binding varies)
@@ -1548,10 +1546,108 @@ class VLCEngine(QObject):
         self.set_rate(pitch)
 
 
+    # ─── Event Handling ──────────────────────────────────────
+
+    def _setup_event_handlers(self):
+        """Setup native VLC event handlers for better performance."""
+        try:
+            # Create event manager from player
+            self._event_manager = self.player.event_manager()
+            
+            # Attach event callbacks using VLC's event_attach method
+            # Note: VLC python bindings use a different API
+            self._event_manager.event_attach(vlc.EventType.MediaPlayerPositionChanged, self._handle_vlc_event)
+            self._event_manager.event_attach(vlc.EventType.MediaPlayerTimeChanged, self._handle_vlc_event)
+            self._event_manager.event_attach(vlc.EventType.MediaPlayerStateChanged, self._handle_vlc_event)
+            self._event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self._handle_vlc_event)
+            self._event_manager.event_attach(vlc.EventType.MediaPlayerStopped, self._handle_vlc_event)
+            
+            self.logger.debug("VLC event handlers registered successfully")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to setup VLC event handlers: {e}")
+            self._events_enabled = False
+
+    def _handle_vlc_event(self, event):
+        """Handle native VLC events."""
+        if not self._events_enabled:
+            return
+            
+        try:
+            event_type = event.type
+            
+            if event_type == vlc.EventType.MediaPlayerPositionChanged:
+                # Position changed event
+                pos = self.player.get_position()
+                current_time = pos * self._duration
+                # Throttle position updates to avoid excessive signals
+                if current_time - self._last_position_update >= 0.1:  # Update every 100ms
+                    self.position_changed.emit(pos)
+                    self._last_position_update = current_time
+                    
+            elif event_type == vlc.EventType.MediaPlayerTimeChanged:
+                # Time changed event (more precise than position)
+                time_ms = self.player.get_time()
+                pos = time_ms / 1000.0
+                self.position_changed.emit(pos)
+                self._last_position_update = pos
+                
+            elif event_type == vlc.EventType.MediaPlayerStateChanged:
+                # State changed event
+                state = self.player.get_state()
+                state_str = "stopped"
+                if state == vlc.State.Playing: state_str = "playing"
+                elif state == vlc.State.Paused: state_str = "paused"
+                elif state == vlc.State.Stopped: state_str = "stopped"
+                elif state == vlc.State.Ended: state_str = "ended"
+                elif state == vlc.State.Error: state_str = "error"
+                
+                if state_str != self._last_state:
+                    self._last_state = state_str
+                    self.state_changed.emit(state_str)
+                    
+                    # Handle special states
+                    if state_str == "ended":
+                        self._handle_media_ended()
+                    elif state_str == "error":
+                        self._poll_timer.stop()
+                        
+            elif event_type == vlc.EventType.MediaPlayerEndReached:
+                # Media ended event
+                self.state_changed.emit("ended")
+                self._handle_media_ended()
+                
+            elif event_type == vlc.EventType.MediaPlayerStopped:
+                # Media stopped event
+                self.state_changed.emit("stopped")
+                
+        except Exception as e:
+            self.logger.error(f"Error handling VLC event: {e}")
+
+    def _handle_media_ended(self):
+        """Handle media end reached event."""
+        if self._loop_mode == 1:  # Loop One
+            self.restart()
+        elif self._loop_mode == 2:  # Loop All
+            # For now, treat Loop All same as Loop One if no playlist manager
+            self.restart()
+        else:
+            self._poll_timer.stop()
+
     # ─── Polling ────────────────────────────────────────────
 
     def _poll_state(self):
-        """Periodically called to emit position/state signals."""
+        """Periodically called to emit position/state signals (fallback when events disabled)."""
+        # If events are enabled, only poll for duration updates and as fallback
+        if self._events_enabled:
+            # Only update duration if not yet known (events handle position/state)
+            length = self.player.get_length()
+            if length > 0 and self._duration == 0.0:
+                self._duration = length / 1000.0
+                self.duration_changed.emit(self._duration)
+            return
+
+        # Fallback: full polling when events are disabled
         state = self.player.get_state()
 
         # Update duration if not yet known

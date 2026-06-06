@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer
 import vlc
 from src.ui.dialogs.sync_widget import SyncWidget
+from src.core.logger import get_logger
 from src.ui.dialogs.video_essential_widget import VideoEssentialWidget
 from src.ui.dialogs.video_crop_widget import VideoCropWidget
 from src.ui.dialogs.video_overlay_widget import VideoOverlayWidget
@@ -291,6 +292,7 @@ class MediaMetadataWidget(QWidget):
     def __init__(self, vlc_engine, parent=None):
         super().__init__(parent)
         self.vlc = vlc_engine
+        self.logger = get_logger('tools_dialogs')
         layout = QVBoxLayout(self)
         self.txt = QTextEdit()
         self.txt.setReadOnly(True)
@@ -330,7 +332,7 @@ class MediaMetadataWidget(QWidget):
 
         except Exception as e:
             self.txt.setPlainText(f"Error retrieving metadata: {e}")
-            print(f"Error in MediaMetadataWidget.refresh: {e}")
+            self.logger.error(f"Error in MediaMetadataWidget.refresh: {e}")
 
 
 class MediaCodecWidget(QWidget):
@@ -338,6 +340,7 @@ class MediaCodecWidget(QWidget):
     def __init__(self, vlc_engine, parent=None):
         super().__init__(parent)
         self.vlc = vlc_engine
+        self.logger = get_logger('tools_dialogs')
         layout = QVBoxLayout(self)
         
         self.tree = QTreeWidget()
@@ -596,9 +599,9 @@ class MediaCodecWidget(QWidget):
         except Exception as e:
             item = QTreeWidgetItem([f"Error retrieving info: {e}"])
             self.tree.addTopLevelItem(item)
-            print(f"Error in MediaCodecWidget.refresh: {e}")
+            self.logger.error(f"Error in MediaCodecWidget.refresh: {e}")
             import traceback
-            traceback.print_exc()
+            self.logger.debug(traceback.format_exc())
 
     def _add_item(self, parent, text):
         item = QTreeWidgetItem([text])
@@ -827,9 +830,7 @@ class AboutDialog(QDialog):
         desc.setAlignment(Qt.AlignCenter)
         layout.addWidget(desc)
         
-        author = QLabel("Built by Antigravity")
-        layout.addWidget(author)
-        
+                
         btns = QDialogButtonBox(QDialogButtonBox.Ok)
         btns.accepted.connect(self.accept)
         layout.addWidget(btns)

@@ -248,8 +248,8 @@ def build_application(build_mode='onedir'):
         args.append('--osx-bundle-name=Omneva')
         args.append('--osx-bundle-info=CFBundleName:Omneva')
         args.append('--osx-bundle-info=CFBundleDisplayName:Omneva Media Player')
-        args.append('--osx-bundle-info=CFBundleVersion:1.2.0')
-        args.append('--osx-bundle-info=CFBundleShortVersionString:1.2.0')
+        args.append('--osx-bundle-info=CFBundleVersion:1.3.0')
+        args.append('--osx-bundle-info=CFBundleShortVersionString:1.3.0')
         args.append('--osx-bundle-info=CFBundleIdentifier:com.omneva.omneva')
         # Icon (ICNS)
         icon_path = os.path.join(assets_src, 'icon.icns')
@@ -458,7 +458,7 @@ def create_macos_pkg():
     
     try:
         subprocess.run(['pkgbuild', '--root', app_bundle_path, '--identifier', 'com.omneva.omneva', 
-                       '--version', '1.2.0', '--install-location', '/Applications', 
+                       '--version', '1.3.0', '--install-location', '/Applications', 
                        'Omneva-MacOS-Installer.pkg'], cwd=base_dir, check=True)
         print("PKG installer created: Omneva-MacOS-Installer.pkg")
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -566,7 +566,7 @@ def create_deb_package():
     
     # Create control file
     control_content = '''Package: omneva
-Version: 1.2.0
+Version: 1.3.0
 Section: multimedia
 Priority: optional
 Architecture: amd64

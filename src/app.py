@@ -21,7 +21,7 @@ class OmnevaApp:
 
         self.app = QApplication(argv)
         self.app.setApplicationName("Omneva")
-        self.app.setApplicationVersion("1.3.0")
+        self.app.setApplicationVersion("1.4.0")
         self.app.setOrganizationName("Omneva")
         self.logger = get_logger('app')
         

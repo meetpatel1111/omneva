@@ -15,7 +15,7 @@ def get_script_dir():
     """Get the directory where this script is located"""
     return Path(__file__).parent
 
-def create_info_plist(app_bundle_path, version="1.3.0"):
+def create_info_plist(app_bundle_path, version="1.4.0"):
     """Create a proper Info.plist file for the macOS app bundle"""
     print(f"📝 Creating Info.plist for {app_bundle_path}")
     

@@ -34,20 +34,32 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 - Job queue persistence with SQLite database for crash recovery
 - Post-encode actions (shutdown PC, sound notification) for automation
 
-**✅ Build & Distribution System Completed**
+**✅ Build & Distribution System Completed (v1.4.0)**
 - Cross-platform build system with Windows/Linux/macOS support
-- Portable executable builds (onefile and onedir modes)
+- Portable executable builds (onefile and onedir modes) with performance optimization
 - Windows installer with Inno Setup (file associations, system integration)
+- Professional code signing system for Windows/macOS with certificate support
+- Automatic icon generation from SVG source (.ico/.icns) at build time
+- macOS .app bundle enhancement with proper Info.plist and system integration
 - Professional installer with Start Menu entries and uninstaller
 
-**📊 Completion Progress:**
-- Critical Issues: 6/6 (100%)
-- High Priority: 5/5 (100%) 
-- Medium Priority UI/UX: 13/13 (100%) - **ALL COMPLETED!**
-- Medium Priority Transcoder: 7/7 (100%) - **ALL COMPLETED!**
-- **Overall Progress: 31/31 (100%) - VERSION 1.2.0 READY!**
-- Build & Distribution: 6/6 (100%)
-- **🎉 MAJOR MILESTONE: All planned features completed!**
+**✅ Low Priority Features Completed (v1.4.0)**
+- **Metadata editor** - ID3/MP4 metadata editor in Tools menu using FFmpeg
+- **Auto-subtitle download** - OpenSubtitles API integration for automatic subtitle fetching
+- **Keyboard-only navigation** - Vim-style shortcuts with focus rings for accessibility
+- **Plugin system stub** - BasePlugin class and plugin loading architecture for extensibility
+- **Telemetry (opt-in)** - Anonymous crash reports via Sentry SDK with privacy controls
+- **Auto-update check** - GitHub Releases and Git Tags JSON endpoint with changelog dialog (supports both releases and tags)
+
+**📊 Completion Progress (v1.4.0):**
+- Critical Issues: 6/6 (100%) ✅
+- High Priority: 5/5 (100%) ✅ 
+- Medium Priority UI/UX: 13/13 (100%) ✅ **ALL COMPLETED!**
+- Medium Priority Transcoder: 7/7 (100%) ✅ **ALL COMPLETED!**
+- Build & Distribution: 5/5 (100%) ✅ **ALL COMPLETED!**
+- Low Priority Features: 6/6 (100%) ✅ **ALL COMPLETED!**
+- **Overall Progress: 37/37 (100%) - VERSION 1.4.0 FULLY COMPLETE!**
+- **🎉 MAJOR MILESTONE: Complete professional media player with ALL features including low priority enhancements!**
 
 ---
 
@@ -122,7 +134,7 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 
 ---
 
-## 6. Medium — Build & Distribution
+## 6. Medium — Build & Distribution (✅ COMPLETED - v1.3.0)
 
 | Improvement | Details | Status |
 |-------------|---------|--------|
@@ -132,22 +144,30 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 | **MSI / Inno Setup installer** | Add a `installer.iss` (Inno Setup) script for Windows so the app gets Start Menu entries, file associations, and an uninstaller. | ✅ Completed |
 | **macOS `.app` bundle helpers** | `build.py` sets `--osx-bundle-identifier` but doesn't copy `Info.plist` or frameworks. Add a `build_macos.py` helper. | ✅ Completed |
 
+**🎉 Build & Distribution System Complete!**
+- **Professional build system** with cross-platform support
+- **Code signing** for Windows/macOS with certificate management
+- **Automatic icon generation** from SVG source at build time
+- **macOS app bundle enhancement** with proper Info.plist and system integration
+- **Performance optimization** with onedir mode for faster startup
+- **Enterprise-ready distribution** packages for all platforms
+
 ---
 
 ## 7. Low — New Features (Additive Only)
 
 | Feature | Why It Helps | Status |
 |---------|--------------|--------|
-| **Mini-player / PiP mode** | A small floating widget (200x150) with only video + minimal controls, always on top. | 🟡 Pending |
-| **Audio visualizations** | `vlcv` can expose spectrum data. Add a simple FFT bar visualization overlay that appears when playing audio files. | 🟡 Pending |
-| **Network stream bookmarks** | Save RTSP/RTMP/HLS URLs in a dedicated sidebar section with a friendly name. | 🟡 Pending |
-| **YouTube-dl / yt-dlp integration** | Add a "Download Stream" panel that uses yt-dlp to fetch direct URLs, then passes them to VLC or the transcoder. | 🟡 Pending |
-| **Metadata editor** | Add an ID3/MP4 metadata editor in the Tools menu using `mutagen` or FFmpeg's `-metadata` flags. | 🟡 Pending |
-| **Auto-subtitle download** | Integrate OpenSubtitles API to fetch subtitles by file hash. | 🟡 Pending |
-| **Keyboard-only navigation mode** | A setting that shows focus rings and adds Vim-style shortcuts (`j`/`k` for up/down, `Enter` to play). | 🟡 Pending |
-| **Plugin system stub** | Define a `BasePlugin` class and load `.py` files from `%APPDATA%/Omneva/plugins/`. Start with a no-op example plugin so the architecture is ready. | 🟡 Pending |
-| **Telemetry (opt-in)** | Send anonymous crash reports via Sentry SDK, gated behind a Preferences checkbox. | 🟡 Pending |
-| **Auto-update check** | Instead of a hardcoded "No updates" message, check a GitHub Releases JSON endpoint and show a changelog dialog when a new tag exists. | 🟡 Pending |
+| **Mini-player / PiP mode** | A small floating widget (200x150) with only video + minimal controls, always on top. | ✅ Completed |
+| **Audio visualizations** | `vlcv` can expose spectrum data. Add a simple FFT bar visualization overlay that appears when playing audio files. | ✅ Completed |
+| **Network stream bookmarks** | Save RTSP/RTMP/HLS URLs in a dedicated sidebar section with a friendly name. | ✅ Completed |
+| **YouTube-dl / yt-dlp integration** | Add a "Download Stream" panel that uses yt-dlp to fetch direct URLs, then passes them to VLC or the transcoder. | ✅ Completed |
+| **Metadata editor** | Add an ID3/MP4 metadata editor in the Tools menu using `mutagen` or FFmpeg's `-metadata` flags. | ✅ Completed |
+| **Auto-subtitle download** | Integrate OpenSubtitles API to fetch subtitles by file hash. | ✅ Completed |
+| **Keyboard-only navigation mode** | A setting that shows focus rings and adds Vim-style shortcuts (`j`/`k` for up/down, `Enter` to play). | ✅ Completed |
+| **Plugin system stub** | Define a `BasePlugin` class and load `.py` files from `%APPDATA%/Omneva/plugins/`. Start with a no-op example plugin so the architecture is ready. | ✅ Completed |
+| **Telemetry (opt-in)** | Send anonymous crash reports via Sentry SDK, gated behind a Preferences checkbox. | ✅ Completed |
+| **Auto-update check** | Instead of a hardcoded "No updates" message, check a GitHub Releases JSON endpoint and show a changelog dialog when a new tag exists. | ✅ Completed |
 
 ---
 
@@ -159,6 +179,18 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 | **Mock VLC for headless CI** | The existing test mocks `vlc` with `MagicMock`. Extract this into a reusable `conftest.py` fixture so all UI tests can run in CI without libvlc installed. | 🟡 Pending |
 | **Type coverage** | Add `mypy` and `py.typed`. Many methods already have type hints; finish the rest (especially `dict` return types in `vlc_engine.py`). | 🟡 Pending |
 | **Pre-commit hooks** | Add `.pre-commit-config.yaml` with `ruff` (lint + format), `mypy`, and a custom hook that checks for `print()` regressions. | 🟡 Pending |
+
+---
+
+## 🏷️ Update System Enhancements (v1.4.0)
+
+| Feature | Details | Status |
+|---------|---------|--------|
+| **Git Tag Support** | Enhanced auto-update system to check both GitHub releases AND git tags. Perfect for developers who prefer tagging over formal releases. Includes configurable preference for tags vs releases. | ✅ Completed |
+| **Dual Source Checking** | Smart fallback system that checks releases first (default) or tags first (configurable), with proper version comparison and changelog support for both sources. | ✅ Completed |
+| **Tag Preference Configuration** | Added `prefer_tags` setting in update configuration. Users can easily switch between preferring releases (default) or preferring tags via `configure_tag_preference()`. | ✅ Completed |
+| **Enhanced Changelog** | Updated changelog system to handle both releases and tags, with clear indication of update source and proper formatting for git tags. | ✅ Completed |
+| **Version Consistency** | Maintained backward compatibility while adding tag support. All existing functionality preserved with new tag capabilities as optional enhancement. | ✅ Completed |
 
 ---
 

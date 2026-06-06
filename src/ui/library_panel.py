@@ -15,6 +15,8 @@ from src.core.ffprobe_service import FFprobeService
 from src.core.ffmpeg_service import FFmpegService
 from src.core.utils import is_media_file, format_duration, get_icon
 from src.core.playlist_model import PlaylistModel
+from src.ui.network_bookmarks import NetworkBookmarksPanel
+from src.ui.youtube_downloader import YouTubeDownloaderPanel
 
 
 class ThumbnailCache:
@@ -509,6 +511,16 @@ class LibraryPanel(QWidget):
         item_mc.setData(Qt.UserRole, "browser")
         self.sidebar.addItem(item_mc)
         
+        # Add Network Bookmarks
+        item_network = QListWidgetItem("Network Streams")
+        item_network.setData(Qt.UserRole, "network")
+        self.sidebar.addItem(item_network)
+        
+        # Add YouTube Downloader
+        item_downloader = QListWidgetItem("Online Downloader")
+        item_downloader.setData(Qt.UserRole, "downloader")
+        self.sidebar.addItem(item_downloader)
+        
         # Placeholders to match VLC look
         self.sidebar.addItem(QListWidgetItem("Devices"))
         self.sidebar.addItem(QListWidgetItem("Local Network"))
@@ -530,8 +542,18 @@ class LibraryPanel(QWidget):
         self.browser_page = FileBrowserWidget()
         self.browser_page.play_requested.connect(self.play_file_requested.emit)
         
+        # Page 3: Network Bookmarks
+        self.network_page = NetworkBookmarksPanel()
+        self.network_page.bookmark_double_clicked.connect(self._on_network_bookmark_selected)
+        
+        # Page 4: YouTube Downloader
+        self.downloader_page = YouTubeDownloaderPanel()
+        self.downloader_page.download_requested.connect(self._on_download_complete)
+        
         self.stack.addWidget(self.playlist_page)
         self.stack.addWidget(self.browser_page)
+        self.stack.addWidget(self.network_page)
+        self.stack.addWidget(self.downloader_page)
         
         layout.addWidget(self.stack, 1)
         
@@ -625,9 +647,23 @@ class LibraryPanel(QWidget):
             self.stack.setCurrentWidget(self.playlist_page)
         elif data == "browser":
             self.stack.setCurrentWidget(self.browser_page)
+        elif data == "network":
+            self.stack.setCurrentWidget(self.network_page)
+        elif data == "downloader":
+            self.stack.setCurrentWidget(self.downloader_page)
         else:
             # Placeholder pages
             pass
+    
+    def _on_network_bookmark_selected(self, bookmark):
+        """Handle network bookmark selection."""
+        if bookmark and bookmark.url:
+            self.play_file_requested.emit(bookmark.url)
+    
+    def _on_download_complete(self, file_path):
+        """Handle download completion."""
+        if file_path and os.path.exists(file_path):
+            self.play_file_requested.emit(file_path)
 
     def set_view_mode(self, mode: int):
         """Pass view mode to browser page (or playlist if we implement modes there)."""

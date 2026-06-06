@@ -24,6 +24,7 @@ from src.ui.settings_dialog import SettingsDialog
 from src.core.history_service import HistoryService
 from src.ui.menus import MenuFactory
 from src.ui.dialogs.snapshot_preview_dialog import SnapshotPreviewDialog
+from src.ui.mini_player import MiniPlayerController
 
 
 class NavButton(QPushButton):
@@ -86,6 +87,9 @@ class MainWindow(QMainWindow):
         
         # Setup system tray
         self._setup_system_tray()
+        
+        # Initialize mini player controller
+        self.mini_player_controller = MiniPlayerController(self)
         
         # Restore window geometry
         self._restore_geometry()
@@ -536,6 +540,7 @@ class MainWindow(QMainWindow):
 
         self.act_media_info.triggered.connect(self._show_media_info)
         self.act_codec_info.triggered.connect(self._show_codec_info)
+        self.act_metadata_editor.triggered.connect(self._show_metadata_editor)
         self.act_preferences.triggered.connect(self._show_preferences)
         self.act_bookmarks.triggered.connect(self._show_bookmarks)
 
@@ -552,6 +557,8 @@ class MainWindow(QMainWindow):
 
         self.act_view_playlist.triggered.connect(self._toggle_playlist_view)
         self.act_always_on_top.triggered.connect(self._toggle_always_on_top)
+        self.act_mini_player.triggered.connect(self._toggle_mini_player)
+        self.act_audio_visualizer.triggered.connect(self._toggle_audio_visualizer)
         self.act_minimal_interface.triggered.connect(self._toggle_minimal_interface)
         self.act_fullscreen_interface.triggered.connect(self.toggle_video_fullscreen)
         self.act_advanced_controls.triggered.connect(self._toggle_advanced_controls)
@@ -817,6 +824,46 @@ class MainWindow(QMainWindow):
         # Changing flags hides the window, so we must show it again
         self.setWindowFlags(flags)
         self.show()
+
+    def _toggle_mini_player(self):
+        """Toggle Mini Player / PiP Mode (Ctrl+M)."""
+        if self.mini_player_controller.is_active():
+            # Hide mini player
+            self.mini_player_controller.hide_mini_player()
+            self.act_mini_player.setChecked(False)
+            self.logger.info("Mini player deactivated")
+        else:
+            # Show mini player with current media if playing
+            current_media = None
+            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing():
+                # Get current media path if available
+                current_media = getattr(self.player_page.vlc, 'current_media', None)
+            
+            self.mini_player_controller.show_mini_player(current_media)
+            self.act_mini_player.setChecked(True)
+            self.logger.info("Mini player activated")
+
+    def _toggle_audio_visualizer(self):
+        """Toggle Audio Visualizer (Ctrl+V)."""
+        if self.player_page.audio_visualizer.is_active():
+            # Hide audio visualizer
+            self.player_page.audio_visualizer.hide_visualization()
+            self.act_audio_visualizer.setChecked(False)
+            self.logger.info("Audio visualizer deactivated")
+        else:
+            # Show audio visualizer
+            # Check if we're playing audio-only content
+            is_audio_only = False
+            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing():
+                # Simple heuristic: if no video track, assume audio-only
+                # In real implementation, would check VLC track info
+                current_media = getattr(self.player_page.vlc, 'current_media', None)
+                if current_media:
+                    is_audio_only = any(current_media.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'])
+            
+            self.player_page.audio_visualizer.show_visualization(is_audio_only)
+            self.act_audio_visualizer.setChecked(True)
+            self.logger.info(f"Audio visualizer activated (audio_only={is_audio_only})")
 
     def _toggle_minimal_interface(self):
         """Toggle Minimal Interface (Ctrl+H) - Hide TitleBar and MenuBar."""

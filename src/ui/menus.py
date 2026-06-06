@@ -2,6 +2,12 @@
 
 from PySide6.QtWidgets import QMenuBar, QMenu
 from PySide6.QtGui import QAction, QKeySequence
+from src.ui.metadata_integration import show_metadata_editor_dialog
+from src.ui.subtitle_integration import show_subtitle_downloader_dialog
+from src.ui.keyboard_integration import show_keyboard_navigation_settings
+from src.ui.plugin_manager import PluginManagerDialog
+from src.ui.telemetry_integration import show_telemetry_settings_dialog
+from src.ui.update_dialog import show_update_dialog, show_no_update_dialog
 
 class MenuFactory:
     """Factory to build and organize the complex VLC-style menu bar."""
@@ -235,6 +241,18 @@ class MenuFactory:
 
         menu.addSeparator()
 
+        self.mw.act_metadata_editor = menu.addAction("Metadata Editor")
+        self.mw.act_metadata_editor.setShortcut(QKeySequence("Ctrl+Shift+M"))
+
+        self.mw.act_subtitle_downloader = menu.addAction("Subtitle Downloader")
+        self.mw.act_subtitle_downloader.setShortcut(QKeySequence("Ctrl+Shift+S"))
+
+        self.mw.act_plugin_manager = menu.addAction("Plugin Manager")
+        self.mw.act_plugin_manager.setShortcut(QKeySequence("Ctrl+Shift+P"))
+
+        self.mw.act_telemetry_settings = menu.addAction("Telemetry Settings")
+        self.mw.act_telemetry_settings.setShortcut(QKeySequence("Ctrl+Shift+T"))
+
         self.mw.act_media_info = menu.addAction("Media Information")
         self.mw.act_media_info.setShortcut(QKeySequence("Ctrl+I"))
         
@@ -276,6 +294,18 @@ class MenuFactory:
 
         self.mw.act_always_on_top = menu.addAction("Always on top")
         self.mw.act_always_on_top.setCheckable(True)
+        
+        self.mw.act_mini_player = menu.addAction("Mini Player / PiP Mode")
+        self.mw.act_mini_player.setShortcut(QKeySequence("Ctrl+M"))
+        self.mw.act_mini_player.setCheckable(True)
+
+        self.mw.act_audio_visualizer = menu.addAction("Audio Visualizer")
+        self.mw.act_audio_visualizer.setShortcut(QKeySequence("Ctrl+V"))
+        self.mw.act_audio_visualizer.setCheckable(True)
+
+        self.mw.act_keyboard_navigation = menu.addAction("Keyboard Navigation")
+        self.mw.act_keyboard_navigation.setShortcut(QKeySequence("Ctrl+K"))
+        self.mw.act_keyboard_navigation.setCheckable(True)
 
         self.mw.act_minimal_interface = menu.addAction("Minimal Interface")
         self.mw.act_minimal_interface.setShortcut(QKeySequence("Ctrl+H"))
@@ -313,3 +343,4 @@ class MenuFactory:
         self.mw.act_about = menu.addAction("About Omneva")
         self.mw.act_about.setShortcut(QKeySequence("Shift+F1"))
         self.mw.act_check_updates = menu.addAction("Check for Updates...")
+        self.mw.act_check_updates.setShortcut(QKeySequence("F12"))

@@ -17,6 +17,7 @@ from src.core.playlist_model import PlaylistModel
 from src.core.logger import get_logger
 from src.core.recovery_service import get_recovery_service
 from src.ui.widgets.chapter_slider import ChapterSlider
+from src.ui.audio_visualizer import AudioVisualizerController
 
 
 class PlayerFFprobeWorker(QObject):
@@ -386,6 +387,9 @@ class PlayerWidget(QWidget):
         self._ffprobe_worker = None
         self.ffprobe = FFprobeService()
 
+        # Initialize audio visualizer controller
+        self.audio_visualizer = AudioVisualizerController(self)
+        
         self._setup_ui()
         self._connect_signals()
 

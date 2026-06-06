@@ -3,10 +3,11 @@
 import os
 import subprocess
 import tempfile
+import json
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFileDialog, QListWidget, QListWidgetItem,
-    QGroupBox, QLineEdit, QTabWidget, QFrame
+    QGroupBox, QLineEdit, QTabWidget, QFrame, QMessageBox
 )
 from PySide6.QtCore import Qt, Signal, QSettings, QThread, QObject
 from PySide6.QtGui import QPixmap
@@ -195,6 +196,17 @@ class TranscoderPanel(QWidget):
         if idx >= 0:
             self.preset_combo.setCurrentIndex(idx)
         controls_layout.addWidget(self.preset_combo, 2)
+        
+        # Import/Export buttons
+        self.btn_export_preset = QPushButton("📤 Export")
+        self.btn_export_preset.setFixedSize(80, 32)
+        self.btn_export_preset.setToolTip("Export current custom settings to JSON file")
+        self.btn_import_preset = QPushButton("📥 Import")
+        self.btn_import_preset.setFixedSize(80, 32)
+        self.btn_import_preset.setToolTip("Import custom settings from JSON file")
+        
+        controls_layout.addWidget(self.btn_export_preset)
+        controls_layout.addWidget(self.btn_import_preset)
 
         controls_layout.addWidget(QLabel("Output:"))
         self.output_edit = QLineEdit()
@@ -251,6 +263,16 @@ class TranscoderPanel(QWidget):
         # Create the tab instance
         tab_instance = tab_class()
         
+        # Connect summary tab signals when it's created
+        if index == 0:  # Summary tab
+            self._connect_summary_tab_signals()
+        
+        # Connect subtitle tab signals when it's created
+        elif index == 5:  # Subtitles tab
+            subtitles_tab = tab_instance
+            if subtitles_tab:
+                self._connect_subtitle_signals(subtitles_tab)
+        
         # Replace the placeholder with the actual tab
         current_widget = self.tabs.widget(index)
         self.tabs.removeTab(index)
@@ -279,6 +301,13 @@ class TranscoderPanel(QWidget):
         self.file_list.currentItemChanged.connect(self._on_file_selected)
         # Connect drop zone signal
         self.drop_zone.files_dropped.connect(self._on_files_dropped)
+        
+        # Connect tab changes to update command preview
+        self.tabs.currentChanged.connect(self._on_tab_changed_for_command)
+        
+        # Connect import/export buttons
+        self.btn_export_preset.clicked.connect(self._export_preset)
+        self.btn_import_preset.clicked.connect(self._import_preset)
 
     # ─── File Selection & Preview ────────────────────────────
 
@@ -512,6 +541,54 @@ class TranscoderPanel(QWidget):
                 summary_tab = self._get_tab(0)  # Summary tab is index 0
                 if summary_tab:
                     summary_tab.combo_format.setCurrentText(fmt)
+        
+        # Update FFmpeg command preview when preset changes
+        self._update_ffmpeg_command_preview()
+
+    def _connect_summary_tab_signals(self):
+        """Connect Summary tab signals to update command preview."""
+        summary_tab = self._get_tab(0)
+        if summary_tab:
+            summary_tab.combo_format.currentTextChanged.connect(self._update_ffmpeg_command_preview)
+            summary_tab.chk_web_optimized.toggled.connect(self._update_ffmpeg_command_preview)
+            summary_tab.chk_align_av.toggled.connect(self._update_ffmpeg_command_preview)
+            summary_tab.chk_metadata.toggled.connect(self._update_ffmpeg_command_preview)
+        
+        # Connect subtitle tab signals to update burn-in preview
+        subtitles_tab = self._get_tab(5)
+        if subtitles_tab:
+            self._connect_subtitle_signals(subtitles_tab)
+
+    def _connect_subtitle_signals(self, subtitles_tab):
+        """Connect subtitle tab signals to update burn-in preview."""
+        # Connect to subtitle track changes
+        if hasattr(subtitles_tab, '_tracks'):
+            for track in subtitles_tab._tracks:
+                if hasattr(track, 'chk_burn_in'):
+                    track.chk_burn_in.toggled.connect(self._update_subtitle_burn_preview)
+        
+        # Also connect to tab changes that might affect subtitle tracks
+        if hasattr(subtitles_tab, 'settings_changed'):
+            subtitles_tab.settings_changed.connect(self._update_subtitle_burn_preview)
+
+    def _update_subtitle_burn_preview(self):
+        """Update the subtitle burn-in preview based on current subtitle settings."""
+        summary_tab = self._get_tab(0)
+        subtitles_tab = self._get_tab(5)
+        
+        if not summary_tab or not subtitles_tab:
+            return
+        
+        # Check if any subtitle track has burn-in enabled
+        burn_in_enabled = False
+        if hasattr(subtitles_tab, '_tracks'):
+            for track in subtitles_tab._tracks:
+                if hasattr(track, 'chk_burn_in') and track.chk_burn_in.isChecked():
+                    burn_in_enabled = True
+                    break
+        
+        # Update the preview overlay
+        summary_tab.update_subtitle_burn_preview(burn_in_enabled)
 
     # ─── File Management ─────────────────────────────────────
 
@@ -531,6 +608,9 @@ class TranscoderPanel(QWidget):
                 
         self.lbl_file_count.setText(f"{len(self._input_files)} files selected")
         
+        # Update FFmpeg command preview when files are added
+        self._update_ffmpeg_command_preview()
+        
         # Select the last added file to trigger metadata load
         if self.file_list.count() > 0:
             self.file_list.setCurrentRow(self.file_list.count() - 1)
@@ -539,6 +619,17 @@ class TranscoderPanel(QWidget):
         self._input_files.clear()
         self.file_list.clear()
         self.lbl_file_count.setText("0 files selected")
+        
+        # Clear FFmpeg command preview when files are cleared
+        summary_tab = self._get_tab(0)
+        if summary_tab:
+            summary_tab.set_ffmpeg_command("")
+
+    def _on_tab_changed_for_command(self, index: int):
+        """Handle tab changes to update FFmpeg command preview."""
+        # Update command preview when switching tabs (especially from Summary to other tabs)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self._update_ffmpeg_command_preview)
 
     def _load_defaults(self):
         """Load default settings from QSettings."""
@@ -757,7 +848,12 @@ class TranscoderPanel(QWidget):
         """Build FFmpeg audio arguments from the Audio tab settings.
         Every option produces correct FFmpeg arguments."""
         audio_tab = self._get_tab(4)  # Audio tab is index 4
-        tracks = audio_tab.get_settings() if audio_tab else []
+        audio_settings = audio_tab.get_settings() if audio_tab else {}
+        
+        # Handle new structure with tracks and normalization
+        tracks = audio_settings.get("tracks", []) if isinstance(audio_settings, dict) else audio_settings
+        normalization_enabled = audio_settings.get("normalization", False) if isinstance(audio_settings, dict) else False
+        
         if not tracks:
             return ["-an"]  # no audio
 
@@ -801,7 +897,7 @@ class TranscoderPanel(QWidget):
                 sr_hz = str(int(float(sr) * 1000))
                 args.extend([f"-ar:a:{i}", sr_hz])
 
-            # ── Audio Filters (pan + volume) ─────────────────
+            # ── Audio Filters (pan + volume + normalization) ─────────────────
             # Build a filter chain — multiple filters joined with ","
             audio_filters = []
 
@@ -813,6 +909,12 @@ class TranscoderPanel(QWidget):
             gain = t["gain"]
             if gain != 0:
                 audio_filters.append(f"volume={gain}dB")
+
+            # Add loudnorm filter for audio normalization if enabled
+            if normalization_enabled:
+                # EBU R128 loudness normalization: I=-16:TP=-1.5:LRA=11
+                loudnorm_filter = "loudnorm=I=-16:TP=-1.5:LRA=11"
+                audio_filters.append(loudnorm_filter)
 
             if audio_filters:
                 args.extend([f"-filter:a:{i}", ",".join(audio_filters)])
@@ -890,6 +992,59 @@ class TranscoderPanel(QWidget):
 
     # ─── Transcoding ─────────────────────────────────────────
 
+    def _update_ffmpeg_command_preview(self):
+        """Update the FFmpeg command preview in the Summary tab."""
+        if not self._input_files:
+            return
+            
+        summary_tab = self._get_tab(0)  # Summary tab is index 0
+        if not summary_tab:
+            return
+            
+        # Get the first input file for preview
+        input_path = self._input_files[0]
+        
+        # Build command preview
+        command_parts = ["ffmpeg", "-i", f'"{input_path}"']
+        
+        # Add video arguments if custom settings
+        preset_key = self.preset_combo.currentData()
+        summary_opts = summary_tab.get_settings() if summary_tab else {}
+        
+        custom_args = []
+        if summary_opts["web_optimized"]:
+            custom_args.extend(["-movflags", "+faststart"])
+            
+        if preset_key == "custom":
+            vid_args = self._get_video_args()
+            sub_args = self._get_subtitle_args(input_path)
+            chap_args = self._get_chapter_args()
+            command_parts.extend(vid_args + sub_args + chap_args + custom_args)
+        else:
+            # Use preset args
+            preset_args = PRESETS[preset_key]["args"].copy()
+            if custom_args:
+                preset_args.extend(custom_args)
+            command_parts.extend(preset_args)
+        
+        # Add output
+        base = os.path.splitext(os.path.basename(input_path))[0]
+        if preset_key == "custom":
+            ext_map = {
+                "mp4": ".mp4", "mkv": ".mkv", "webm": ".webm",
+                "avi": ".avi", "ts": ".ts", "ps": ".mpg", "ogg": ".ogg", "asf": ".wmv"
+            }
+            ext = ext_map.get(summary_opts["format"], ".mp4")
+        else:
+            ext = PRESETS[preset_key]["ext"]
+            
+        output_path = os.path.join(os.path.dirname(input_path), f"{base}_transcoded{ext}")
+        command_parts.append(f'"{output_path}"')
+        
+        # Update the command display
+        command_str = " ".join(command_parts)
+        summary_tab.set_ffmpeg_command(command_str)
+
     def _start_transcoding(self):
         if not self._input_files:
             return
@@ -947,3 +1102,259 @@ class TranscoderPanel(QWidget):
 
             # Emit signal so QueuePanel can pick it up
             self.job_added.emit(job_id, os.path.basename(input_path), job_name)
+
+    def _export_preset(self):
+        """Export current custom settings to a JSON file."""
+        # Collect all current settings from all tabs
+        preset_data = {
+            "name": "Custom Preset",
+            "description": "Exported custom preset from Omneva",
+            "version": "1.0",
+            "settings": {}
+        }
+        
+        try:
+            # Summary tab settings
+            summary_tab = self._get_tab(0)
+            if summary_tab:
+                preset_data["settings"]["summary"] = summary_tab.get_settings()
+            
+            # Dimensions tab settings
+            dimensions_tab = self._get_tab(1)
+            if dimensions_tab:
+                preset_data["settings"]["dimensions"] = dimensions_tab.get_settings()
+            
+            # Filters tab settings
+            filters_tab = self._get_tab(2)
+            if filters_tab:
+                preset_data["settings"]["filters"] = filters_tab.get_settings()
+            
+            # Video tab settings
+            video_tab = self._get_tab(3)
+            if video_tab:
+                preset_data["settings"]["video"] = video_tab.get_settings()
+            
+            # Audio tab settings
+            audio_tab = self._get_tab(4)
+            if audio_tab:
+                preset_data["settings"]["audio"] = audio_tab.get_settings()
+            
+            # Subtitles tab settings
+            subtitles_tab = self._get_tab(5)
+            if subtitles_tab:
+                preset_data["settings"]["subtitles"] = subtitles_tab.get_settings()
+            
+            # Chapters tab settings
+            chapters_tab = self._get_tab(6)
+            if chapters_tab:
+                preset_data["settings"]["chapters"] = chapters_tab.get_settings()
+            
+            # Ask user for file location
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Export Custom Preset", 
+                "custom_preset.json",
+                "JSON Files (*.json);;All Files (*)"
+            )
+            
+            if file_path:
+                # Ensure .json extension
+                if not file_path.endswith('.json'):
+                    file_path += '.json'
+                
+                # Write preset to file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(preset_data, f, indent=2, ensure_ascii=False)
+                
+                QMessageBox.information(
+                    self, "Export Successful",
+                    f"Custom preset exported to:\n{file_path}"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"Error exporting preset: {e}")
+            QMessageBox.warning(
+                self, "Export Failed",
+                f"Failed to export preset:\n{str(e)}"
+            )
+
+    def _import_preset(self):
+        """Import custom settings from a JSON file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Import Custom Preset",
+            "",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            # Read preset from file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                preset_data = json.load(f)
+            
+            # Validate preset structure
+            if "settings" not in preset_data:
+                raise ValueError("Invalid preset file: missing 'settings' section")
+            
+            settings = preset_data["settings"]
+            
+            # Apply settings to each tab
+            if "summary" in settings:
+                summary_tab = self._get_tab(0)
+                if summary_tab:
+                    self._apply_tab_settings(summary_tab, settings["summary"])
+            
+            if "dimensions" in settings:
+                dimensions_tab = self._get_tab(1)
+                if dimensions_tab:
+                    self._apply_tab_settings(dimensions_tab, settings["dimensions"])
+            
+            if "filters" in settings:
+                filters_tab = self._get_tab(2)
+                if filters_tab:
+                    self._apply_tab_settings(filters_tab, settings["filters"])
+            
+            if "video" in settings:
+                video_tab = self._get_tab(3)
+                if video_tab:
+                    self._apply_tab_settings(video_tab, settings["video"])
+            
+            if "audio" in settings:
+                audio_tab = self._get_tab(4)
+                if audio_tab:
+                    self._apply_tab_settings(audio_tab, settings["audio"])
+            
+            if "subtitles" in settings:
+                subtitles_tab = self._get_tab(5)
+                if subtitles_tab:
+                    self._apply_tab_settings(subtitles_tab, settings["subtitles"])
+            
+            if "chapters" in settings:
+                chapters_tab = self._get_tab(6)
+                if chapters_tab:
+                    self._apply_tab_settings(chapters_tab, settings["chapters"])
+            
+            # Switch to Custom Settings preset
+            self.preset_combo.setCurrentIndex(0)
+            
+            # Update command preview
+            self._update_ffmpeg_command_preview()
+            
+            QMessageBox.information(
+                self, "Import Successful",
+                f"Custom preset imported from:\n{file_path}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Error importing preset: {e}")
+            QMessageBox.warning(
+                self, "Import Failed",
+                f"Failed to import preset:\n{str(e)}"
+            )
+
+    def _apply_tab_settings(self, tab, settings):
+        """Apply settings to a specific tab based on its type."""
+        if not settings:
+            return
+            
+        # Determine tab type and apply settings accordingly
+        tab_class = tab.__class__.__name__
+        
+        if tab_class == "SummaryTab":
+            self._apply_summary_settings(tab, settings)
+        elif tab_class == "DimensionsTab":
+            self._apply_dimensions_settings(tab, settings)
+        elif tab_class == "FiltersTab":
+            self._apply_filters_settings(tab, settings)
+        elif tab_class == "VideoSettingsTab":
+            self._apply_video_settings(tab, settings)
+        elif tab_class == "AudioTab":
+            self._apply_audio_settings(tab, settings)
+        elif tab_class == "SubtitlesTab":
+            self._apply_subtitles_settings(tab, settings)
+        elif tab_class == "ChaptersTab":
+            self._apply_chapters_settings(tab, settings)
+        
+        # Emit settings changed signal
+        if hasattr(tab, 'settings_changed'):
+            tab.settings_changed.emit()
+
+    def _apply_summary_settings(self, tab, settings):
+        """Apply settings to Summary tab."""
+        if "format" in settings:
+            format_text = settings["format"].capitalize()
+            index = tab.combo_format.findText(format_text)
+            if index >= 0:
+                tab.combo_format.setCurrentIndex(index)
+        
+        if "web_optimized" in settings:
+            tab.chk_web_optimized.setChecked(settings["web_optimized"])
+        
+        if "align_av" in settings:
+            tab.chk_align_av.setChecked(settings["align_av"])
+        
+        if "metadata_passthru" in settings:
+            tab.chk_metadata.setChecked(settings["metadata_passthru"])
+
+    def _apply_dimensions_settings(self, tab, settings):
+        """Apply settings to Dimensions tab."""
+        # This would need to be implemented based on the actual DimensionsTab structure
+        # For now, we'll just emit the signal
+        pass
+
+    def _apply_filters_settings(self, tab, settings):
+        """Apply settings to Filters tab."""
+        # This would need to be implemented based on the actual FiltersTab structure
+        # For now, we'll just emit the signal
+        pass
+
+    def _apply_video_settings(self, tab, settings):
+        """Apply settings to Video tab."""
+        if "encoder" in settings:
+            encoder_text = settings["encoder"]
+            index = tab.combo_encoder.findText(encoder_text)
+            if index >= 0:
+                tab.combo_encoder.setCurrentIndex(index)
+        
+        if "fps" in settings:
+            fps_text = settings["fps"]
+            index = tab.combo_fps.findText(fps_text)
+            if index >= 0:
+                tab.combo_fps.setCurrentIndex(index)
+        
+        # Apply quality settings
+        if "quality_mode" in settings:
+            if settings["quality_mode"] == "rf":
+                tab.radio_rf.setChecked(True)
+            else:
+                tab.radio_bitrate.setChecked(True)
+        
+        if "rf_value" in settings:
+            tab.slider_rf.setValue(settings["rf_value"])
+            tab.spin_rf.setValue(settings["rf_value"])
+        
+        if "bitrate" in settings:
+            tab.spin_bitrate.setValue(settings["bitrate"])
+        
+        # Apply preset slider
+        if "preset" in settings:
+            tab.slider_preset.setValue(settings["preset"])
+
+    def _apply_audio_settings(self, tab, settings):
+        """Apply settings to Audio tab."""
+        # This would need to be implemented based on the actual AudioTab structure
+        # For now, we'll just emit the signal
+        pass
+
+    def _apply_subtitles_settings(self, tab, settings):
+        """Apply settings to Subtitles tab."""
+        # This would need to be implemented based on the actual SubtitlesTab structure
+        # For now, we'll just emit the signal
+        pass
+
+    def _apply_chapters_settings(self, tab, settings):
+        """Apply settings to Chapters tab."""
+        # This would need to be implemented based on the actual ChaptersTab structure
+        # For now, we'll just emit the signal
+        pass

@@ -473,6 +473,10 @@ class MainWindow(QMainWindow):
         self.transcoder_page.queue.job_completed.connect(self.queue_page.on_job_completed)
         self.transcoder_page.queue.job_failed.connect(self.queue_page.on_job_failed)
 
+        # QueuePanel → QueueManager: wire post-encode actions
+        self.queue_page.chk_shutdown.toggled.connect(self._on_post_encode_actions_changed)
+        self.queue_page.chk_sound.toggled.connect(self._on_post_encode_actions_changed)
+
         # Player signals
         self.player_page.fullscreen_requested.connect(self.toggle_video_fullscreen)
         self.player_page.title_changed.connect(self._update_title)
@@ -646,6 +650,11 @@ class MainWindow(QMainWindow):
         """Handle new job from transcoder: add to queue and switch view."""
         self.queue_page.add_job(job_id, input_path, job_name)
         self._navigate(self.PAGE_QUEUE)
+
+    def _on_post_encode_actions_changed(self):
+        """Handle post-encode action checkbox changes."""
+        actions = self.queue_page.get_post_encode_actions()
+        self.transcoder_page.queue.set_post_encode_actions(actions)
 
     def _open_stream(self):
         """Stream — show info dialog."""

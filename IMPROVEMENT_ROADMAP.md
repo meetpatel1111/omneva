@@ -25,6 +25,15 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 - AB Loop UI with three-click operation
 - Snapshot preview dialog with file management
 
+**✅ All Medium Priority Transcoder & Converter Enhancements Completed**
+- FFmpeg command preview in Summary tab for power users
+- Hardware acceleration auto-detect for VideoSettingsTab (NVENC/QSV/AMF/Videotoolbox)
+- Batch preset import/export for custom presets with JSON format
+- Audio normalization with loudnorm filter (EBU R128 standard)
+- Subtitle burn-in preview with visual overlay indicator
+- Job queue persistence with SQLite database for crash recovery
+- Post-encode actions (shutdown PC, sound notification) for automation
+
 **✅ Build & Distribution System Completed**
 - Cross-platform build system with Windows/Linux/macOS support
 - Portable executable builds (onefile and onedir modes)
@@ -34,7 +43,9 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 **📊 Completion Progress:**
 - Critical Issues: 6/6 (100%)
 - High Priority: 5/5 (100%) 
-- Medium Priority UI/UX: 13/12 (100%) - **ALL COMPLETED!**
+- Medium Priority UI/UX: 13/13 (100%) - **ALL COMPLETED!**
+- Medium Priority Transcoder: 7/7 (100%) - **ALL COMPLETED!**
+- **Overall Progress: 31/31 (100%) - VERSION 1.2.0 READY!**
 - Build & Distribution: 6/6 (100%)
 - **🎉 MAJOR MILESTONE: All planned features completed!**
 
@@ -101,13 +112,13 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 
 | Improvement | Details | Status |
 |-------------|---------|--------|
-| **FFmpeg command preview** | Before starting encoding, show the exact `ffmpeg` CLI that will run in a collapsible text box on the Summary tab. This is invaluable for power users. | 🟡 Pending |
-| **Hardware acceleration auto-detect** | `VideoSettingsTab` lists NVENC/QSV/AMF/Videotoolbox but doesn't check if they exist. Run `ffmpeg -encoders` once at startup and grey out unavailable options. | 🟡 Pending |
-| **Batch preset import/export** | Add JSON import/export for custom presets so users can share them. | 🟡 Pending |
-| **Audio normalization ( loudnorm )** | Add a checkbox in the Audio tab to inject `loudnorm=I=-16:TP=-1.5:LRA=11` into the audio filter chain. | 🟡 Pending |
-| **Subtitle burn-in preview** | Show a small text overlay in the Summary preview image indicating whether burn-in is enabled. | 🟡 Pending |
-| **Job queue persistence** | If the app crashes during a 2-hour encode, the queue is lost. Serialize pending jobs to SQLite and offer resume on restart. | 🟡 Pending |
-| **Post-encode actions** | Add checkboxes for "Shutdown PC when done" and "Play sound when done" in the Queue panel. | 🟡 Pending |
+| **FFmpeg command preview** | Before starting encoding, show the exact `ffmpeg` CLI that will run in a collapsible text box on the Summary tab. This is invaluable for power users. | ✅ Completed |
+| **Hardware acceleration auto-detect** | `VideoSettingsTab` lists NVENC/QSV/AMF/Videotoolbox but doesn't check if they exist. Run `ffmpeg -encoders` once at startup and grey out unavailable options. | ✅ Completed |
+| **Batch preset import/export** | Add JSON import/export for custom presets so users can share them. | ✅ Completed |
+| **Audio normalization ( loudnorm )** | Add a checkbox in the Audio tab to inject `loudnorm=I=-16:TP=-1.5:LRA=11` into the audio filter chain. | ✅ Completed |
+| **Subtitle burn-in preview** | Show a small text overlay in the Summary preview image indicating whether burn-in is enabled. | ✅ Completed |
+| **Job queue persistence** | If the app crashes during a 2-hour encode, the queue is lost. Serialize pending jobs to SQLite and offer resume on restart. | ✅ Completed |
+| **Post-encode actions** | Add checkboxes for "Shutdown PC when done" and "Play sound when done" in the Queue panel. | ✅ Completed |
 
 ---
 

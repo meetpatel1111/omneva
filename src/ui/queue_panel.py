@@ -3,7 +3,7 @@
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QProgressBar, QScrollArea
+    QFrame, QProgressBar, QScrollArea, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal
 from src.core.logger import get_logger
@@ -106,6 +106,77 @@ class QueuePanel(QWidget):
         self.btn_clear_done.setFixedHeight(30)
         self.btn_clear_done.clicked.connect(self._clear_completed)
         header_row.addWidget(self.btn_clear_done)
+
+        # Post-encode actions
+        self.chk_shutdown = QCheckBox("Shutdown PC when done")
+        self.chk_shutdown.setObjectName("postEncodeAction")
+        self.chk_shutdown.setToolTip("Automatically shutdown the computer when all jobs complete")
+        self.chk_shutdown.setStyleSheet("""
+            QCheckBox {
+                color: #fff;
+                font-size: 11px;
+                padding: 4px 8px;
+                border: 1px solid #555;
+                border-radius: 4px;
+                background-color: #3a3a3a;
+            }
+            QCheckBox:hover {
+                background-color: #4a4a4a;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #888;
+                border-radius: 2px;
+                background-color: #2a2a2a;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #ff6b6b;
+                border-color: #ff6b6b;
+            }
+            QCheckBox::indicator:checked::after {
+                content: "✓";
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+            }
+        """)
+        header_row.addWidget(self.chk_shutdown)
+
+        self.chk_sound = QCheckBox("Play sound when done")
+        self.chk_sound.setObjectName("postEncodeAction")
+        self.chk_sound.setToolTip("Play a notification sound when all jobs complete")
+        self.chk_sound.setStyleSheet("""
+            QCheckBox {
+                color: #fff;
+                font-size: 11px;
+                padding: 4px 8px;
+                border: 1px solid #555;
+                border-radius: 4px;
+                background-color: #3a3a3a;
+            }
+            QCheckBox:hover {
+                background-color: #4a4a4a;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #888;
+                border-radius: 2px;
+                background-color: #2a2a2a;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4CAF50;
+                border-color: #4CAF50;
+            }
+            QCheckBox::indicator:checked::after {
+                content: "✓";
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+            }
+        """)
+        header_row.addWidget(self.chk_sound)
 
         layout.addLayout(header_row)
 
@@ -215,3 +286,10 @@ class QueuePanel(QWidget):
         except Exception as e:
             self.logger.error(f"Failed to get queue job states: {e}")
         return job_states
+
+    def get_post_encode_actions(self) -> dict:
+        """Get the current post-encode action settings."""
+        return {
+            "shutdown": self.chk_shutdown.isChecked(),
+            "sound": self.chk_sound.isChecked()
+        }

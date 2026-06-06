@@ -1,11 +1,14 @@
 """Video Settings Tab for Transcoder."""
 
+import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QRadioButton, QSlider, QSpinBox, QCheckBox, QLineEdit,
-    QGroupBox, QFormLayout, QFrame
+    QGroupBox, QFormLayout, QFrame, QToolTip
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
+
+from src.core.ffmpeg_service import FFmpegService
 
 class VideoSettingsTab(QWidget):
     """
@@ -17,8 +20,11 @@ class VideoSettingsTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("videoTab")
+        self.ffmpeg = FFmpegService()
+        self.hardware_encoders = {}
         self._setup_ui()
         self._connect_signals()
+        self._detect_hardware_encoders()
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -175,6 +181,74 @@ class VideoSettingsTab(QWidget):
         main_layout.addWidget(opts_group)
         main_layout.addStretch()
 
+    def _detect_hardware_encoders(self):
+        """Detect available hardware encoders and update UI accordingly."""
+        try:
+            self.hardware_encoders = self.ffmpeg.get_available_hardware_encoders()
+            self._update_encoder_availability()
+        except Exception as e:
+            # If detection fails, assume no hardware encoders available
+            self.hardware_encoders = {'nvenc': False, 'qsv': False, 'videotoolbox': False, 'amf': False}
+            self._update_encoder_availability()
+
+    def _update_encoder_availability(self):
+        """Update encoder dropdown based on available hardware encoders."""
+        # Store current selection
+        current_selection = self.combo_encoder.currentText()
+        
+        # Disable hardware encoders that aren't available
+        for i in range(self.combo_encoder.count()):
+            encoder_text = self.combo_encoder.itemText(i)
+            should_disable = False
+            tooltip_text = ""
+            
+            if "NVENC" in encoder_text:
+                should_disable = not self.hardware_encoders.get('nvenc', False)
+                if should_disable:
+                    tooltip_text = "NVIDIA NVENC not available - requires NVIDIA GPU with proper drivers"
+                    
+            elif "QSV" in encoder_text:
+                should_disable = not self.hardware_encoders.get('qsv', False)
+                if should_disable:
+                    tooltip_text = "Intel Quick Sync Video not available - requires Intel GPU with supported generation"
+                    
+            elif "VideoToolbox" in encoder_text:
+                should_disable = not self.hardware_encoders.get('videotoolbox', False)
+                if should_disable:
+                    tooltip_text = "macOS VideoToolbox not available - requires macOS with supported hardware"
+                    
+            elif "AMF" in encoder_text:
+                should_disable = not self.hardware_encoders.get('amf', False)
+                if should_disable:
+                    tooltip_text = "AMD AMF not available - requires AMD GPU with proper drivers"
+            
+            # Update item state
+            model = self.combo_encoder.model()
+            item = model.item(i)
+            if item:
+                item.setEnabled(not should_disable)
+                if should_disable:
+                    item.setToolTip(tooltip_text)
+                else:
+                    item.setToolTip("")
+        
+        # If current selection is disabled, switch to a software encoder
+        current_index = self.combo_encoder.findText(current_selection)
+        if current_index >= 0:
+            current_item = self.combo_encoder.model().item(current_index)
+            if current_item and not current_item.isEnabled():
+                # Switch to first available software encoder
+                for i in range(self.combo_encoder.count()):
+                    encoder_text = self.combo_encoder.itemText(i)
+                    if ("x264" in encoder_text or "x265" in encoder_text or 
+                        "SVT-AV1" in encoder_text or "VP9" in encoder_text or "VP8" in encoder_text or
+                        "MPEG-" in encoder_text or "Theora" in encoder_text or "DV Video" in encoder_text or
+                        "Sorenson" in encoder_text):
+                        item = self.combo_encoder.model().item(i)
+                        if item and item.isEnabled():
+                            self.combo_encoder.setCurrentIndex(i)
+                            break
+
     def _connect_signals(self):
         # Slider <-> Spinbox for RF
         self.slider_rf.valueChanged.connect(self._on_rf_slider_changed)
@@ -223,9 +297,11 @@ class VideoSettingsTab(QWidget):
             "fps_mode": "vfr" if self.radio_vfr.isChecked() else "cfr",
             "quality_mode": "rf" if self.radio_rf.isChecked() else "bitrate",
             "rf": self.spin_rf.value(),
+            "rf_value": self.spin_rf.value(),  # For import compatibility
             "bitrate": self.spin_bitrate.value(),
             "two_pass": self.check_multipass.isChecked(),
             "preset": self.lbl_preset.text().lower(),
+            "preset_value": self.slider_preset.value(),  # For import compatibility
             "tune": self.combo_tune.currentText(),
             "profile": self.combo_profile.currentText(),
             "level": self.combo_level.currentText(),

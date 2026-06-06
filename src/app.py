@@ -21,8 +21,8 @@ class OmnevaApp:
 
         self.app = QApplication(argv)
         self.app.setApplicationName("Omneva")
-        self.app.setApplicationVersion("1.0.0")
-        self.app.setOrganizationName("Omneva Team")
+        self.app.setApplicationVersion("1.2.0")
+        self.app.setOrganizationName("Omneva")
         self.logger = get_logger('app')
         
         # Set Window Icon

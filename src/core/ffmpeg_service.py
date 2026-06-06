@@ -826,3 +826,47 @@ class FFmpegService:
             return result is not None and result.returncode == 0
         except Exception:
             return False
+
+    def get_available_hardware_encoders(self) -> dict:
+        """Check which hardware encoders are available on the system."""
+        hardware_encoders = {
+            'nvenc': False,  # NVIDIA NVENC (H.264/H.265)
+            'qsv': False,    # Intel Quick Sync Video
+            'videotoolbox': False,  # macOS VideoToolbox
+            'amf': False    # AMD AMF
+        }
+        
+        try:
+            # Run ffmpeg -encoders to get list of available encoders
+            result = safe_subprocess_run(
+                [self.ffmpeg_path, "-encoders"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            
+            if result and result.returncode == 0:
+                encoder_output = result.stdout.lower()
+                
+                # Check for NVIDIA NVENC encoders
+                if 'h264_nvenc' in encoder_output or 'hevc_nvenc' in encoder_output:
+                    hardware_encoders['nvenc'] = True
+                
+                # Check for Intel Quick Sync Video encoders
+                if 'h264_qsv' in encoder_output or 'hevc_qsv' in encoder_output:
+                    hardware_encoders['qsv'] = True
+                
+                # Check for macOS VideoToolbox encoders
+                if 'h264_videotoolbox' in encoder_output or 'hevc_videotoolbox' in encoder_output:
+                    hardware_encoders['videotoolbox'] = True
+                
+                # Check for AMD AMF encoders
+                if 'h264_amf' in encoder_output or 'hevc_amf' in encoder_output:
+                    hardware_encoders['amf'] = True
+                    
+        except Exception as e:
+            # If we can't check encoders, assume no hardware acceleration
+            pass
+            
+        return hardware_encoders

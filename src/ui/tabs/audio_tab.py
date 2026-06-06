@@ -5,7 +5,7 @@ Mixdown, Samplerate, Gain, DRC.
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QSpinBox, QScrollArea, QFrame, QMenu,
+    QPushButton, QSpinBox, QScrollArea, QFrame, QMenu, QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -220,6 +220,42 @@ class AudioTab(QWidget):
         toolbar.addWidget(self.btn_reload)
 
         toolbar.addStretch()
+        
+        # Audio normalization checkbox
+        self.chk_normalization = QCheckBox("Audio Normalization")
+        self.chk_normalization.setToolTip("Apply loudnorm filter (I=-16:TP=-1.5:LRA=11) for consistent loudness")
+        self.chk_normalization.setStyleSheet("""
+            QCheckBox {
+                color: #fff;
+                font-size: 11px;
+                padding: 4px 8px;
+                border: 1px solid #555;
+                border-radius: 4px;
+                background-color: #3a3a3a;
+            }
+            QCheckBox:hover {
+                background-color: #4a4a4a;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #888;
+                border-radius: 2px;
+                background-color: #2a2a2a;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4CAF50;
+                border-color: #4CAF50;
+            }
+            QCheckBox::indicator:checked::after {
+                content: "✓";
+                color: white;
+                font-size: 10px;
+                font-weight: bold;
+            }
+        """)
+        toolbar.addWidget(self.chk_normalization)
+        
         main_layout.addLayout(toolbar)
 
         # ─── Column Headers ──────────────────────────────────
@@ -346,6 +382,9 @@ class AudioTab(QWidget):
             else:
                 track.combo_mixdown.setCurrentText("Stereo")
 
-    def get_settings(self) -> list[dict]:
-        """Return settings for all audio tracks."""
-        return [t.get_settings() for t in self._tracks]
+    def get_settings(self) -> dict:
+        """Return settings for all audio tracks and normalization."""
+        return {
+            "tracks": [t.get_settings() for t in self._tracks],
+            "normalization": self.chk_normalization.isChecked()
+        }

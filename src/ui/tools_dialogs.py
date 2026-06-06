@@ -822,10 +822,10 @@ class AboutDialog(QDialog):
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
         layout.addWidget(title)
         
-        version = QLabel("Version 1.0.0")
+        version = QLabel("Version 1.1.0")
         layout.addWidget(version)
         
-        desc = QLabel("A powerful, cross-platform media player powered by VLC and FFmpeg.")
+        desc = QLabel("A powerful, cross-platform media player powered by VLC and FFmpeg.\n\nAll planned features completed - Production Ready!")
         desc.setWordWrap(True)
         desc.setAlignment(Qt.AlignCenter)
         layout.addWidget(desc)

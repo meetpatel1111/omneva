@@ -4,9 +4,8 @@ import os
 import platform
 import subprocess
 from typing import Dict
-from PySide6.QtCore import QObject, QTimer
-from PySide6.QtMultimedia import QSound, QMediaPlayer
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QObject, QTimer, QUrl
+from PySide6.QtMultimedia import QMediaPlayer
 
 from .logger import get_logger
 
@@ -29,7 +28,7 @@ class PostEncodeActions(QObject):
             self.logger.debug("Sound player initialized with QMediaPlayer")
         except Exception as e:
             self.logger.warning(f"Failed to initialize QMediaPlayer: {e}")
-            # Fallback to QSound
+            # Fallback to system sound
             self._sound_player = None
     
     def play_completion_sound(self):
@@ -104,11 +103,19 @@ class PostEncodeActions(QObject):
                 # Generate a simple beep sound programmatically
                 self._generate_beep_sound()
             else:
-                # Use QSound fallback
-                QSound.play("")
+                # Use system beep fallback
+                self._play_system_beep()
                 
         except Exception as e:
             self.logger.warning(f"Built-in sound failed: {e}")
+    
+    def _play_system_beep(self):
+        """Play system beep sound."""
+        try:
+            # Use system bell character
+            print("\a")
+        except Exception:
+            pass
     
     def _generate_beep_sound(self):
         """Generate a simple beep sound."""

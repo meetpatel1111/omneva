@@ -126,11 +126,11 @@ Every existing feature is preserved; these are additive or quality-of-life impro
 
 | Improvement | Details | Status |
 |-------------|---------|--------|
-| **Switch from `--onefile` to `--onedir`** | One-file mode extracts ~50MB to a temp folder on every launch, adding 3–10s startup delay. Use `--onedir` for faster startup and easier debugging. Keep `--onefile` as an optional "portable" build target. | 🟡 Pending |
-| **Code-signing stub** | Add a `sign.py` script that calls `signtool.exe` (Windows) / `codesign` (macOS) so antivirus false-positives are reduced. | 🟡 Pending |
-| **Generate an `.icns` and `.ico`** | The app references `icon.ico` in `build.py` but only `icon.svg` exists in `src/assets`. Generate `.ico` (Windows) and `.icns` (macOS) from the SVG at build time. | 🟡 Pending |
+| **Switch from `--onefile` to `--onedir`** | One-file mode extracts ~50MB to a temp folder on every launch, adding 3–10s startup delay. Use `--onedir` for faster startup and easier debugging. Keep `--onefile` as an optional "portable" build target. | ✅ Completed |
+| **Code-signing stub** | Add a `sign.py` script that calls `signtool.exe` (Windows) / `codesign` (macOS) so antivirus false-positives are reduced. | ✅ Completed |
+| **Generate an `.icns` and `.ico`** | The app references `icon.ico` in `build.py` but only `icon.svg` exists in `src/assets`. Generate `.ico` (Windows) and `.icns` (macOS) from the SVG at build time. | ✅ Completed |
 | **MSI / Inno Setup installer** | Add a `installer.iss` (Inno Setup) script for Windows so the app gets Start Menu entries, file associations, and an uninstaller. | ✅ Completed |
-| **macOS `.app` bundle helpers** | `build.py` sets `--osx-bundle-identifier` but doesn't copy `Info.plist` or frameworks. Add a `build_macos.py` helper. | 🟡 Pending |
+| **macOS `.app` bundle helpers** | `build.py` sets `--osx-bundle-identifier` but doesn't copy `Info.plist` or frameworks. Add a `build_macos.py` helper. | ✅ Completed |
 
 ---
 

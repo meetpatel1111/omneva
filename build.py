@@ -21,15 +21,18 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Cross-platform Omneva Media Player build system')
     parser.add_argument('--platform', choices=['windows', 'linux', 'macos', 'all'], 
                        default='current', help='Target platform to build for')
-    parser.add_argument('--package', choices=['portable', 'installer', 'appimage', 'deb', 'dmg', 'pkg', 'all'], 
-                       default='all', help='Package type to create')
+    parser.add_argument('--package', choices=['portable', 'portable-onefile', 'installer', 'appimage', 'deb', 'dmg', 'pkg', 'all'], 
+                       default='all', help='Package type to create (portable-onefile creates single exe for maximum portability)')
     parser.add_argument('--build-mode', choices=['onedir', 'onefile'], 
-                       default='onefile', help='Build mode: onedir (directory) or onefile (single executable)')
+                       default='onedir', help='Build mode: onedir (directory) for faster startup or onefile (single executable) for portable distribution')
     parser.add_argument('--clean', action='store_true', help='Clean build directories before building')
+    parser.add_argument('--sign', action='store_true', help='Sign build artifacts with code signing certificate')
+    parser.add_argument('--cert', help='Path to code signing certificate (Windows .p12)')
+    parser.add_argument('--identity', help='macOS signing identity (e.g., "Developer ID Application: Your Name")')
     return parser.parse_args()
 
 # Cross-platform build functions
-def build_for_platform(target_platform, package_types, build_mode='onefile'):
+def build_for_platform(target_platform, package_types, build_mode='onedir', args=None):
     """Build for a specific target platform regardless of current platform"""
     print(f"Building for target platform: {target_platform} (mode: {build_mode})")
     
@@ -42,6 +45,10 @@ def build_for_platform(target_platform, package_types, build_mode='onefile'):
         print(f"Building for current platform ({current_platform}) instead...")
         target_platform = current_platform
     
+    # Generate icons before building
+    if not generate_required_icons():
+        print("⚠️  Icon generation failed, continuing with available icons...")
+    
     # Build the application for current platform
     build_application(build_mode)
     
@@ -49,8 +56,14 @@ def build_for_platform(target_platform, package_types, build_mode='onefile'):
     if target_platform == 'windows':
         if package_types in ['all', 'portable']:
             create_windows_portable()
+        if package_types in ['all', 'portable-onefile']:
+            create_windows_portable_onefile()
         if package_types in ['all', 'installer']:
             create_windows_installer()
+        
+        # Sign build artifacts if requested
+        if args.sign and IS_WIN:
+            sign_build_artifacts_windows(args.cert)
     elif target_platform == 'linux':
         if package_types in ['all', 'portable']:
             create_linux_package()
@@ -65,8 +78,98 @@ def build_for_platform(target_platform, package_types, build_mode='onefile'):
             create_macos_dmg()
         if package_types in ['all', 'pkg']:
             create_macos_pkg()
+        
+        # Enhance macOS app bundle
+        if IS_MAC:
+            enhance_macos_bundle()
+        
+        # Sign build artifacts if requested
+        if args.sign and IS_MAC:
+            entitlements_path = os.path.join(base_dir, 'entitlements.plist') if os.path.exists(os.path.join(base_dir, 'entitlements.plist')) else None
+            sign_build_artifacts_macos(args.identity, entitlements_path)
 
-def build_application(build_mode='onefile'):
+def generate_required_icons():
+    """Generate required icon files from SVG source"""
+    print("🎨 Generating required icons from SVG...")
+    
+    # Import icon generation functions
+    import sys
+    sys.path.insert(0, base_dir)
+    try:
+        from generate_icons import find_svg_icon, render_svg_to_png, create_ico_file, create_icns_file
+    except ImportError:
+        print("❌ generate_icons.py not found. Icon generation disabled.")
+        return False
+    
+    # Find SVG icon
+    svg_path = find_svg_icon()
+    if not svg_path:
+        print("❌ SVG icon not found. Icon generation disabled.")
+        return False
+    
+    print(f"📄 Found SVG icon: {svg_path}")
+    
+    # Check if icons already exist
+    assets_dir = os.path.join(base_dir, 'src', 'assets')
+    ico_path = os.path.join(assets_dir, 'icon.ico')
+    icns_path = os.path.join(assets_dir, 'icon.icns')
+    
+    icons_needed = []
+    if IS_WIN and not os.path.exists(ico_path):
+        icons_needed.append('ico')
+    if IS_MAC and not os.path.exists(icns_path):
+        icons_needed.append('icns')
+    
+    if not icons_needed:
+        print("✅ All required icons already exist")
+        return True
+    
+    # Generate PNG files at required sizes
+    sizes = [16, 32, 48, 64, 128, 256, 512]
+    png_paths = []
+    
+    for size in sizes:
+        png_path = render_svg_to_png(svg_path, size)
+        if png_path and os.path.exists(png_path):
+            png_paths.append(png_path)
+    
+    if not png_paths:
+        print("❌ No PNG files were generated successfully")
+        return False
+    
+    print(f"✅ Generated {len(png_paths)} PNG files")
+    
+    success = True
+    
+    # Generate ICO file for Windows
+    if 'ico' in icons_needed:
+        print("🔧 Generating ICO file for Windows...")
+        if create_ico_file(png_paths, ico_path):
+            print(f"✅ Created ICO file: {ico_path}")
+        else:
+            print("❌ Failed to create ICO file")
+            success = False
+    
+    # Generate ICNS file for macOS
+    if 'icns' in icons_needed:
+        print("🔧 Generating ICNS file for macOS...")
+        if create_icns_file(png_paths, icns_path):
+            print(f"✅ Created ICNS file: {icns_path}")
+        else:
+            print("❌ Failed to create ICNS file")
+            success = False
+    
+    # Clean up PNG files
+    import shutil
+    for png_path in png_paths:
+        try:
+            os.remove(png_path)
+        except:
+            pass
+    
+    return success
+
+def build_application(build_mode='onedir'):
     """Build the application using PyInstaller"""
     print(f"Building Omneva for platform: {PLATFORM.upper()} (mode: {build_mode})")
 
@@ -219,6 +322,68 @@ def create_windows_installer():
             print("Inno Setup not found - skipping Windows installer")
     except:
         print("Inno Setup not found - skipping Windows installer")
+
+def create_windows_portable_onefile():
+    """Create Windows portable package using onefile mode for maximum portability"""
+    print("Creating Windows portable package (onefile mode)...")
+    
+    portable_path = os.path.join(base_dir, 'portable_windows_onefile')
+    if os.path.exists(portable_path):
+        shutil.rmtree(portable_path)
+    os.makedirs(portable_path)
+    
+    # Build in onefile mode specifically
+    build_application('onefile')
+    
+    # Copy the single executable
+    onefile_exe = os.path.join(base_dir, 'dist', 'Omneva.exe')
+    if os.path.isfile(onefile_exe):
+        shutil.copy2(onefile_exe, os.path.join(portable_path, 'Omneva.exe'))
+        
+        # Create launcher script for single file
+        launcher_script = f"""@echo off
+cd /d "%~dp0"
+start Omneva.exe
+"""
+        
+        with open(os.path.join(portable_path, 'Run_Omneva.bat'), 'w') as f:
+            f.write(launcher_script)
+        
+        # Create README for portable package
+        readme_content = """# Omneva Media Player - Portable Version
+
+## Installation
+No installation required! Simply extract this folder and run Omneva.exe.
+
+## Usage
+- Double-click Omneva.exe to start the application
+- Or use Run_Omneva.bat for command-line launch
+
+## Features
+- Complete media player with transcoding capabilities
+- Hardware acceleration support
+- Batch preset management
+- Job queue persistence
+- Post-encode automation
+
+## System Requirements
+- Windows 10/11 (64-bit)
+- DirectX 11 compatible graphics
+- 4GB RAM recommended
+
+## Notes
+This portable version includes all dependencies and doesn't require installation.
+Settings and data are stored in your user profile directory.
+
+Version: 1.2.0
+"""
+        
+        with open(os.path.join(portable_path, 'README.txt'), 'w') as f:
+            f.write(readme_content)
+        
+        print(f"Windows Portable OneFile Package: {portable_path}")
+    else:
+        print("No onefile build output found - skipping portable-onefile package creation")
 
 def create_linux_package():
     """Create Linux package"""
@@ -530,7 +695,7 @@ def main():
     
     # Build for each platform
     for platform in platforms:
-        build_for_platform(platform, args.package, args.build_mode)
+        build_for_platform(platform, args.package, args.build_mode, args)
     
     print("\n" + "=" * 50)
     print("Cross-Platform Build Complete!")
@@ -556,6 +721,136 @@ def main():
                 print(f"    - *.dmg (DMG installer)")
             if args.package in ['all', 'pkg']:
                 print(f"    - *.pkg (PKG installer)")
+
+# Code Signing Functions
+def sign_build_artifacts_windows(cert_path=None):
+    """Sign Windows build artifacts using signtool.exe"""
+    print("🔐 Signing Windows build artifacts...")
+    
+    # Import sign.py functions
+    import sys
+    sys.path.insert(0, base_dir)
+    try:
+        from sign import sign_windows_executable, find_executable
+    except ImportError:
+        print("❌ sign.py not found. Code signing disabled.")
+        return False
+    
+    # Find signtool.exe
+    signtool_paths = [
+        r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64",
+        r"C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64",
+        r"C:\Program Files (x86)\Windows Kits\8.1\bin\x64",
+        r"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin"
+    ]
+    
+    signtool = find_executable('signtool.exe', signtool_paths)
+    if not signtool:
+        print("❌ signtool.exe not found. Please install Windows SDK.")
+        print("   Available from: https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/")
+        return False
+    
+    print(f"✅ Found signtool.exe at: {signtool}")
+    
+    signed_count = 0
+    dist_dir = os.path.join(base_dir, 'dist')
+    
+    # Sign main executable
+    exe_path = os.path.join(dist_dir, 'Omneva.exe')
+    if os.path.exists(exe_path):
+        if sign_windows_executable(exe_path, cert_path):
+            signed_count += 1
+    
+    # Sign executables in onedir builds
+    onedir_path = os.path.join(dist_dir, 'Omneva')
+    if os.path.exists(onedir_path):
+        for exe_file in os.listdir(onedir_path):
+            if exe_file.endswith('.exe'):
+                exe_full_path = os.path.join(onedir_path, exe_file)
+                if sign_windows_executable(exe_full_path, cert_path):
+                    signed_count += 1
+    
+    print(f"✅ Successfully signed {signed_count} Windows artifacts")
+    return signed_count > 0
+
+def sign_build_artifacts_macos(identity=None, entitlements=None):
+    """Sign macOS build artifacts using codesign"""
+    print("🔐 Signing macOS build artifacts...")
+    
+    # Import sign.py functions
+    import sys
+    sys.path.insert(0, base_dir)
+    try:
+        from sign import sign_macos_bundle
+    except ImportError:
+        print("❌ sign.py not found. Code signing disabled.")
+        return False
+    
+    # Check if codesign is available
+    try:
+        subprocess.run(['codesign', '--help'], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ codesign not found. Please install Xcode Command Line Tools.")
+        print("   Run: xcode-select --install")
+        return False
+    
+    print("✅ Found codesign")
+    
+    signed_count = 0
+    dist_dir = os.path.join(base_dir, 'dist')
+    
+    # Sign .app bundles
+    for item in os.listdir(dist_dir):
+        if item.endswith('.app'):
+            app_path = os.path.join(dist_dir, item)
+            if sign_macos_bundle(app_path, identity, entitlements):
+                signed_count += 1
+    
+    print(f"✅ Successfully signed {signed_count} macOS artifacts")
+    return signed_count > 0
+
+def enhance_macos_bundle():
+    """Enhance macOS app bundle with proper structure and metadata"""
+    print("🍎 Enhancing macOS app bundle...")
+    
+    # Import macOS bundle helper functions
+    import sys
+    sys.path.insert(0, base_dir)
+    try:
+        from build_macos import enhance_pyinstaller_bundle, fix_pyinstaller_bundle
+    except ImportError:
+        print("❌ build_macos.py not found. macOS bundle enhancement disabled.")
+        return False
+    
+    dist_dir = os.path.join(base_dir, 'dist')
+    app_name = 'Omneva'
+    
+    # Check if app bundle exists
+    app_bundle_path = os.path.join(dist_dir, f'{app_name}.app')
+    if not os.path.exists(app_bundle_path):
+        print(f"❌ App bundle not found: {app_bundle_path}")
+        return False
+    
+    print(f"📦 Found app bundle: {app_bundle_path}")
+    
+    success = True
+    
+    # Enhance the bundle
+    if not enhance_pyinstaller_bundle(dist_dir, app_name):
+        print("⚠️  Bundle enhancement had some issues")
+        success = False
+    
+    # Fix PyInstaller issues
+    if not fix_pyinstaller_bundle(dist_dir, app_name):
+        print("⚠️  PyInstaller fixes had some issues")
+        success = False
+    
+    if success:
+        print("✅ macOS app bundle enhancement completed successfully!")
+    else:
+        print("⚠️  macOS app bundle enhancement completed with warnings")
+    
+    return success
 
 if __name__ == '__main__':
     main()

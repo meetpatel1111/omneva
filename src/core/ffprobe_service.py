@@ -3,7 +3,7 @@
 import json
 import subprocess
 import os
-from typing import Optional
+from typing import Optional, Any
 
 from src.core.utils import find_ffprobe, format_duration, format_size, format_bitrate
 from .security import safe_subprocess_run, validate_file_path
@@ -138,7 +138,7 @@ class FFprobeService:
         except json.JSONDecodeError as e:
             return {"error": f"Failed to parse ffprobe output: {e}"}
 
-    def _parse_metadata(self, file_path: str, data: dict) -> dict:
+    def _parse_metadata(self, file_path: str, data: dict) -> dict[str, Any]:
         """Parse raw ffprobe JSON into structured format."""
         fmt = data.get("format", {})
 
@@ -227,10 +227,10 @@ class FFprobeService:
         try:
             if "/" in rate_str:
                 num, den = rate_str.split("/")
-                den = int(den)
-                if den == 0:
+                den_int = int(den)
+                if den_int == 0:
                     return 0.0
-                return round(int(num) / den, 2)
+                return round(int(num) / den_int, 2)
             return round(float(rate_str), 2)
         except (ValueError, ZeroDivisionError):
             return 0.0

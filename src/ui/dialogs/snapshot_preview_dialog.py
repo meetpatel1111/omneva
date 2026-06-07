@@ -110,8 +110,8 @@ class SnapshotPreviewDialog(QDialog):
             if pixmap.width() > max_size or pixmap.height() > max_size:
                 pixmap = pixmap.scaled(
                     max_size, max_size, 
-                    Qt.KeepAspectRatio, 
-                    Qt.SmoothTransformation
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
                 )
             
             self.preview_label.setPixmap(pixmap)

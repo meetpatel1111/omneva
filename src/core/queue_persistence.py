@@ -18,7 +18,7 @@ class QueuePersistence:
         # Default database path in user data directory
         if db_path is None:
             from PySide6.QtCore import QStandardPaths
-            data_dir = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            data_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
             os.makedirs(data_dir, exist_ok=True)
             db_path = os.path.join(data_dir, "omneva_queue.db")
         
@@ -95,7 +95,7 @@ class QueuePersistence:
                 
                 if progress is not None:
                     updates.append("progress = ?")
-                    params.append(progress)
+                    params.append(str(progress))
                 
                 if error is not None:
                     updates.append("error = ?")

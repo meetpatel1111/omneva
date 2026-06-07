@@ -771,8 +771,8 @@ class PlayerWidget(QWidget):
             self.controls.setObjectName("playerControls")
             self._center_layout.addWidget(self.controls)
             self._show_controls()
-            self.setCursor(Qt.ArrowCursor)
-            self.video_surface.setCursor(Qt.ArrowCursor)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.video_surface.setCursor(Qt.CursorShape.ArrowCursor)
             self._hide_timer.stop()
             self._cursor_timer.stop()
             
@@ -880,7 +880,7 @@ class PlayerWidget(QWidget):
     def _show_controls(self):
         """Show the controls overlay."""
         self.controls.show()
-        self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def _auto_hide_controls(self):
         """Hide the controls overlay."""
@@ -1319,8 +1319,4 @@ class PlayerWidget(QWidget):
         event.accept()
 
 
-    def _on_mute_changed(self, muted: bool):
-        """Update mute button icon."""
-        from src.core.utils import get_icon
-        icon_name = "volume-mute.svg" if muted else "volume-high.svg"
-        self.controls.btn_mute.setIcon(get_icon(icon_name))
+    

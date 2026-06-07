@@ -48,7 +48,7 @@ class JobItem(QFrame):
         self.lbl_speed = QLabel("")
         self.lbl_speed.setObjectName("jobSpeed")
         self.lbl_speed.setFixedWidth(70)
-        self.lbl_speed.setAlignment(Qt.AlignRight)
+        self.lbl_speed.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         bottom.addWidget(self.progress, 1)
         bottom.addWidget(self.lbl_speed)

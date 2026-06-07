@@ -12,9 +12,9 @@ class HistoryService(QObject):
     def __init__(self, max_recent: int = 10):
         super().__init__()
         self.max_recent = max_recent
-        self._history_stack = []
-        self._forward_stack = []
-        self._current_media = None
+        self._history_stack: list[str] = []
+        self._forward_stack: list[str] = []
+        self._current_media: str | None = None
 
     def add_media(self, file_path: str, push_history: bool = True):
         """Register a new media file being played."""

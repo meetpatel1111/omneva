@@ -74,12 +74,12 @@ class TitleBar(QWidget):
 
     # ─── Drag to move window ────────────────────────────────
     def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.window().frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if self._drag_pos is not None and event.buttons() & Qt.LeftButton:
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
             # Un-maximize if dragging while maximized
             win = self.window()
             if win.isMaximized():
@@ -95,5 +95,5 @@ class TitleBar(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Double-click to toggle maximize."""
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self.maximize_clicked.emit()

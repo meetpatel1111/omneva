@@ -654,7 +654,7 @@ class FFmpegService:
     def transcode(
         self,
         job: TranscodeJob,
-        on_progress: Callable[[float, str], None] = None,
+        on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> TranscodeJob:
         """
         Run a transcode/convert job synchronously (call from QThread).
@@ -783,7 +783,7 @@ class FFmpegService:
         output_path: str,
         codec: str = "libmp3lame",
         bitrate: str = "320k",
-        on_progress: Callable[[float, str], None] = None,
+        on_progress: Optional[Callable[[float, str], None]] = None,
     ) -> dict:
         """Extract audio from a video file."""
         job = TranscodeJob(

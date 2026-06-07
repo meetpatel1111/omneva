@@ -52,11 +52,12 @@ def format_duration(seconds: float) -> str:
 
 def format_size(bytes_count: int) -> str:
     """Format bytes to human readable size."""
+    bytes_float: float = bytes_count
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes_count < 1024:
-            return f"{bytes_count:.1f} {unit}"
-        bytes_count /= 1024
-    return f"{bytes_count:.1f} PB"
+        if bytes_float < 1024:
+            return f"{bytes_float:.1f} {unit}"
+        bytes_float /= 1024
+    return f"{bytes_float:.1f} PB"
 
 
 def format_bitrate(bps: int) -> str:
@@ -93,7 +94,7 @@ def find_ffmpeg() -> str | None:
 
     # 2. Check settings
     settings = storage.get_settings()
-    path = settings.value("ffmpeg_path", "")
+    path = str(settings.value("ffmpeg_path", ""))
     if path and os.path.isfile(path):
         return path
         
@@ -117,7 +118,7 @@ def find_ffprobe() -> str | None:
 
     # 2. Check settings
     settings = storage.get_settings()
-    path = settings.value("ffprobe_path", "")
+    path = str(settings.value("ffprobe_path", ""))
     if path and os.path.isfile(path):
         return path
         

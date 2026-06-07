@@ -32,7 +32,7 @@ class NavButton(QPushButton):
         self.setText(f"{icon_text}  {text}")
         self.setObjectName("navBtn")
         self.setCheckable(True)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
 
 class MainWindow(QMainWindow):
@@ -328,7 +328,7 @@ class MainWindow(QMainWindow):
             # Method 5: Fallback - try to detect from system palette
             palette = QApplication.palette()
             # Check if window background is dark (lower values = darker)
-            window_bg = palette.color(QPalette.Window)
+            window_bg = palette.color(QPalette.ColorRole.Window)
             
             # Calculate luminance (simplified)
             bg_luminance = (0.299 * window_bg.red() + 0.587 * window_bg.green() + 0.114 * window_bg.blue()) / 255
@@ -934,24 +934,40 @@ class MainWindow(QMainWindow):
         self._snapshot_preview_dialog.activateWindow()
 
     def _show_media_info(self):
-        """Show media info dialog with FFprobe data."""
+        """Show comprehensive media information dialog."""
         if not self.player_page.vlc.is_playing():
             QMessageBox.information(self, "Media Information", "No media playing.")
             return
 
+        # First show quick playback info
         rate = self.player_page.vlc.get_rate()
         vol = self.player_page.vlc.get_volume()
         dur = self.player_page.vlc.get_duration()
         pos = self.player_page.vlc.get_position()
 
-        info = (
+        quick_info = (
             f"Playback Rate: {rate}x\n"
             f"Volume: {vol}%\n"
             f"Muted: {self.player_page.vlc.is_muted()}\n"
             f"Duration: {dur:.1f}s\n"
             f"Position: {pos:.1f}s"
         )
-        QMessageBox.information(self, "Current Media Info", info)
+        
+        # Show comprehensive MediaInfoDialog
+        from src.ui.tools_dialogs import MediaInfoDialog
+        if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
+            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
+        
+        try:
+            # Set quick info as a note in the dialog
+            self.media_info_dlg.tabs.setCurrentIndex(0)
+            self.media_info_dlg.refresh_current_tab()
+            self.media_info_dlg.show()
+            self.media_info_dlg.raise_()
+            self.media_info_dlg.activateWindow()
+        except RuntimeError:
+            # Fallback to quick info if dialog fails
+            QMessageBox.information(self, "Current Media Info", quick_info)
 
 
 
@@ -1347,22 +1363,6 @@ class MainWindow(QMainWindow):
             self.effects_dlg = EffectsAndFiltersDialog(self.player_page.vlc, self)
             self.effects_dlg.tabs.setCurrentIndex(tab_index if isinstance(tab_index, int) else 0)
             self.effects_dlg.show()
-
-    def _show_media_info(self):
-        """Show Media Information Dialog (General tab)."""
-        from src.ui.tools_dialogs import MediaInfoDialog
-        if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
-            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
-        
-        try:
-            self.media_info_dlg.tabs.setCurrentIndex(0)
-            self.media_info_dlg.refresh_current_tab()
-            self.media_info_dlg.show()
-            self.media_info_dlg.raise_()
-            self.media_info_dlg.activateWindow()
-        except RuntimeError:
-            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
-            self.media_info_dlg.show()
 
     def _show_metadata_editor(self):
         """Show Metadata Editor Dialog."""

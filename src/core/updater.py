@@ -379,7 +379,7 @@ class UpdateDownloader(QObject):
         
         self.logger.debug("Update downloader initialized")
     
-    def download_update(self, url: str, filename: str = None) -> bool:
+    def download_update(self, url: str, filename: Optional[str] = None) -> bool:
         """Download update installer."""
         try:
             if self.download_thread and self.download_thread.is_alive():
@@ -521,7 +521,7 @@ class UpdateConfig:
         self.config[key] = value
         self.save_config()
     
-    def should_check_for_updates(self) -> bool:
+    def should_check_for_updates(self, version: Optional[str] = None) -> bool:
         """Check if it's time to check for updates."""
         if not self.get('auto_check_enabled', True):
             return False
@@ -542,7 +542,7 @@ class UpdateConfig:
             self.logger.error(f"Error checking update timing: {e}")
             return True
     
-    def update_last_check(self, version: str = None):
+    def update_last_check(self, version: Optional[str] = None):
         """Update last check time and version."""
         from datetime import datetime
         

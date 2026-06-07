@@ -245,3 +245,27 @@ class QueueManager(QObject):
             if self._post_encode_settings.get("sound", False) or self._post_encode_settings.get("shutdown", False):
                 self.logger.info("Queue empty, executing post-encode actions")
                 self.post_encode_actions.execute_actions(self._post_encode_settings)
+
+    def cleanup(self):
+        """Cancel all active jobs and wait for threads to finish."""
+        self.logger.info("Cleaning up queue manager...")
+        
+        # Cancel all running jobs first
+        for job_id in list(self._active_threads.keys()):
+            try:
+                self.cancel_job(job_id)
+            except Exception as e:
+                self.logger.error(f"Error cancelling job {job_id} during cleanup: {e}")
+                
+        # Wait for threads to finish
+        for job_id, thread in list(self._active_threads.items()):
+            if thread.isRunning():
+                self.logger.debug(f"Waiting for transcoder thread {job_id}...")
+                thread.quit()
+                if not thread.wait(2000):
+                    self.logger.warning(f"Thread {job_id} did not finish within timeout, terminating!")
+                    thread.terminate()
+                    thread.wait(500)
+                    
+        self._active_threads.clear()
+        self._active_workers.clear()

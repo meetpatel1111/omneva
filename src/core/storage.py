@@ -2,11 +2,13 @@
 
 import os
 import sqlite3
+from typing import Any
 from PySide6.QtCore import QSettings, QStandardPaths
 from .logger import get_logger
 
 class StorageManager:
     _instance = None
+    logger: Any
 
     def __new__(cls):
         if cls._instance is None:
@@ -52,7 +54,7 @@ class StorageManager:
     def get_settings(self) -> QSettings:
         """Return QSettings instance using the local INI file."""
         self._ensure_initialized()
-        return QSettings(self.settings_path, QSettings.IniFormat)
+        return QSettings(self.settings_path, QSettings.Format.IniFormat)
 
     def _init_db(self):
         """Create tables if they don't exist."""

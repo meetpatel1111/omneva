@@ -2,7 +2,7 @@
 
 import sys
 import os
-import vlc
+import vlc  # type: ignore
 from typing import Optional
 
 from PySide6.QtCore import QObject, Signal, QTimer

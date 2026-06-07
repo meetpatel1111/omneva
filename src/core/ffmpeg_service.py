@@ -689,7 +689,7 @@ class FFmpegService:
             "-i", job.input_path,
             "-progress", "pipe:1",  # Progress to stdout
             "-nostats",
-        ] + ffmpeg_args + [job.output_path]
+        ] + list(ffmpeg_args) + [job.output_path]
 
         try:
             job.status = "running"

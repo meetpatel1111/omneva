@@ -326,7 +326,7 @@ class TranscoderPanel(QWidget):
                 self.file_list.addItem(item)
         
         # Update UI
-        self._update_file_count()
+        self.lbl_file_count.setText(f"{len(self._input_files)} files selected")
         self.drop_zone.set_files(self._input_files)
         
         # Select first file if no current selection

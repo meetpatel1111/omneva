@@ -65,7 +65,7 @@ class AudioTrackRow(QFrame):
     def __init__(self, track_label: str = "Track 1", parent=None):
         super().__init__(parent)
         self.setObjectName("audioTrackRow")
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(44)
 
         row = QHBoxLayout(self)

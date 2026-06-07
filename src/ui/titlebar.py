@@ -28,9 +28,18 @@ class TitleBar(QWidget):
         layout.setSpacing(0)
 
         # App icon & title
-        self.icon_label = QLabel("🎬")
+        self.icon_label = QLabel()
         self.icon_label.setObjectName("titleIcon")
-        self.icon_label.setFixedWidth(20)
+        self.icon_label.setFixedWidth(24)
+
+        import os
+        from PySide6.QtGui import QPixmap
+        icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "logo.png")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path).scaled(20, 20, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.icon_label.setPixmap(pixmap)
+        else:
+            self.icon_label.setText("🎬")
 
         self.title_label = QLabel("Omneva")
         self.title_label.setObjectName("titleText")

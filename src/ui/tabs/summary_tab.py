@@ -265,12 +265,10 @@ class SummaryTab(QWidget):
         if loading:
             self.lbl_tracks.setText("Loading metadata...")
             self.lbl_size.setText("Loading...")
-            self.lbl_name.setEnabled(False)
             self.combo_format.setEnabled(False)
         else:
             self.lbl_tracks.setText("No file selected")
             self.lbl_size.setText("N/A")
-            self.lbl_name.setEnabled(True)
             self.combo_format.setEnabled(True)
 
     def set_size_info(self, width: int, height: int):
@@ -283,8 +281,8 @@ class SummaryTab(QWidget):
             # Scale to fit while keeping aspect ratio
             scaled = pixmap.scaled(
                 self.preview_frame.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
             )
             self.preview_frame.setPixmap(scaled)
         else:

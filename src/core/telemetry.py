@@ -145,15 +145,15 @@ class TelemetryManager(QObject):
             return
         
         try:
-            # Try to import sentry_sdk
-            import sentry_sdk
-            from sentry_sdk.integrations.qt import QtIntegration
+            import sentry_sdk  # type: ignore
+            from sentry_sdk.integrations.qt import QtIntegration  # type: ignore
+            SENTRY_AVAILABLE = True
             
             # Sentry DSN (this would be a real DSN in production)
             sentry_dsn = "https://examplePublicKey@o0.ingest.sentry.io/0"
             
             # Configure Sentry
-            sentry_sdk.init(
+            sentry_sdk.init(  # type: ignore
                 dsn=sentry_dsn,
                 traces_sample_rate=0.1,  # 10% of transactions
                 environment="production",
@@ -167,7 +167,7 @@ class TelemetryManager(QObject):
                 ]
             )
             
-            self.sentry_client = sentry_sdk.get_current_hub()
+            self.sentry_client = sentry_sdk.get_current_hub()  # type: ignore
             
             # Set user context (anonymous)
             user_id = self.config.get('user_id')
@@ -176,21 +176,21 @@ class TelemetryManager(QObject):
                 user_id = str(uuid.uuid4())
                 self.config.set('user_id', user_id)
             
-            sentry_sdk.set_user({
+            sentry_sdk.set_user({  # type: ignore
                 'id': user_id,
                 'ip_address': '{{auto}}',  # Anonymize IP
                 'username': 'anonymous'
             })
             
             # Set tags
-            sentry_sdk.set_tags({
+            sentry_sdk.set_tags({  # type: ignore
                 'platform': self.system_info.get('platform', 'unknown'),
                 'version': self.config.get('version', '1.4.1'),
                 'python_version': self.system_info.get('python_version', 'unknown')
             })
             
             # Set extra context
-            sentry_sdk.set_context('system', self.system_info)
+            sentry_sdk.set_context('system', self.system_info)  # type: ignore
             
             self.logger.info("Sentry SDK initialized successfully")
             
@@ -260,7 +260,7 @@ class TelemetryManager(QObject):
             # Add context if provided
             if context:
                 import sentry_sdk
-                sentry_sdk.set_context('custom', context)
+                sentry_sdk.set_context('custom', context)  # type: ignore
             
             # Capture exception
             self.sentry_client.capture_exception(exception)
@@ -282,7 +282,7 @@ class TelemetryManager(QObject):
             # Add context if provided
             if context:
                 import sentry_sdk
-                sentry_sdk.set_context('custom', context)
+                sentry_sdk.set_context('custom', context)  # type: ignore
             
             # Capture message
             self.sentry_client.capture_message(message, level)
@@ -318,7 +318,7 @@ class TelemetryManager(QObject):
     def _collect_performance_data(self):
         """Collect performance metrics."""
         try:
-            import psutil
+            import psutil  # type: ignore
             
             # System metrics
             cpu_percent = psutil.cpu_percent(interval=1)
@@ -360,9 +360,9 @@ class TelemetryManager(QObject):
         
         try:
             # Create consent dialog
-            msg = QMessageBox(parent)
-            msg.setWindowTitle("Telemetry & Crash Reports")
-            msg.setIcon(QMessageBox.Question)
+            msg_box = QMessageBox(parent)
+            msg_box.setWindowTitle("Telemetry & Crash Reports")
+            msg_box.setIcon(QMessageBox.Icon.Question)
             
             title = "Help Improve Omneva"
             message = """
@@ -385,21 +385,21 @@ You can change this setting anytime in the preferences.
 <b>Your data is completely anonymous and helps us fix bugs faster.</b>
             """.strip()
             
-            msg.setText(title)
-            msg.setInformativeText(message)
+            msg_box.setText(title)
+            msg_box.setInformativeText(message)
             
             # Add custom buttons
-            enable_btn = msg.addButton("Enable Telemetry", QMessageBox.AcceptRole)
-            msg.addButton("Disable", QMessageBox.RejectRole)
+            btn_yes = msg_box.addButton("Yes, send reports", QMessageBox.ButtonRole.AcceptRole)
+            btn_no = msg_box.addButton("No, don't send", QMessageBox.ButtonRole.RejectRole)
             
             # Set default to enable (helps us get more data)
-            msg.setDefaultButton(enable_btn)
+            msg_box.setDefaultButton(btn_yes)
             
             # Show dialog
-            msg.exec_()
+            msg_box.exec_()
             
             # Handle response
-            if msg.clickedButton() == enable_btn:
+            if msg_box.clickedButton() == btn_yes:
                 self.enable_telemetry(True)
                 return True
             else:

@@ -118,15 +118,15 @@ class ChaptersTab(QWidget):
 
             # Chapter number (read-only)
             num_item = QTableWidgetItem(str(row + 1))
-            num_item.setFlags(num_item.flags() & ~Qt.ItemIsEditable)
-            num_item.setTextAlignment(Qt.AlignCenter)
+            num_item.setFlags(num_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            num_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 0, num_item)
 
             # Start time (read-only, formatted)
             time_str = self._format_time(start)
             time_item = QTableWidgetItem(time_str)
-            time_item.setFlags(time_item.flags() & ~Qt.ItemIsEditable)
-            time_item.setTextAlignment(Qt.AlignCenter)
+            time_item.setFlags(time_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            time_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 1, time_item)
 
             # Chapter name (editable)

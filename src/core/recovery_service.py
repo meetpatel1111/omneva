@@ -20,9 +20,9 @@ class RecoveryState:
     current_position: float = 0.0
     current_volume: int = 100
     current_page: int = 0  # Main window page index
-    recent_files: list = None
-    transcoder_jobs: list = None
-    queue_jobs: list = None
+    recent_files: Optional[list] = None
+    transcoder_jobs: Optional[list] = None
+    queue_jobs: Optional[list] = None
     
     def __post_init__(self):
         if self.recent_files is None:
@@ -184,8 +184,8 @@ class RecoveryService:
                     "timestamp": state.timestamp,
                     "date": datetime.fromtimestamp(state.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
                     "current_file": state.current_file,
-                    "has_recent_files": len(state.recent_files) > 0,
-                    "has_jobs": len(state.transcoder_jobs) > 0 or len(state.queue_jobs) > 0
+                    "has_recent_files": bool(state.recent_files),
+                    "has_jobs": bool(state.transcoder_jobs) or bool(state.queue_jobs)
                 }
         except Exception as e:
             self.logger.error(f"Failed to get recovery info: {e}")

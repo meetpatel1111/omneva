@@ -998,7 +998,7 @@ class VideoEffectsDialog(QDialog):
         self.chk_enable_adj = QCheckBox("Enable")
         adj_layout.addWidget(self.chk_enable_adj)
         
-        from vlc import VideoAdjustOption
+        from vlc import VideoAdjustOption  # type: ignore
         self.sliders = {}
         for label, opt in [
             ("Brightness", VideoAdjustOption.Brightness),

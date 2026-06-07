@@ -3,6 +3,7 @@
 import os
 import sys
 from datetime import datetime
+from typing import Optional, Any, cast
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QPushButton, QStackedWidget, QFileDialog, QInputDialog, QMessageBox,
     QApplication, QSystemTrayIcon, QMenu, QStyle,
@@ -55,6 +56,11 @@ class MainWindow(QMainWindow):
         self._is_fullscreen = False
         self._quit_at_end = False
         self.setWindowFlags(Qt.FramelessWindowHint)
+        
+        # Set Application Icon
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         
         # Use storage-managed settings
         self._settings = storage.get_settings()
@@ -259,7 +265,9 @@ class MainWindow(QMainWindow):
                 stylesheet = f.read()
                 # Apply font scaling to the stylesheet
                 scaled_stylesheet = self._apply_font_scaling(stylesheet, font_scale)
-                QApplication.instance().setStyleSheet(scaled_stylesheet)
+                app = cast(QApplication, QApplication.instance())
+                if app:
+                    app.setStyleSheet(scaled_stylesheet)
         else:
             self.logger.warning(f"Theme file not found: {theme_file}")
         
@@ -429,14 +437,14 @@ class MainWindow(QMainWindow):
     def _apply_font_scaling_to_app(self, scale_factor: float):
         """Apply font scaling to the application's default font."""
         try:
-            app = QApplication.instance()
+            app = cast(QApplication, QApplication.instance())
             if app:
                 font = app.font()
                 current_size = font.pointSizeF()
                 if current_size > 0:
                     scaled_size = current_size * scale_factor
                     font.setPointSizeF(scaled_size)
-                    app.setFont(font)
+                    app.setFont(font) # type: ignore
                     self.logger.debug(f"Applied font scaling: {scale_factor:.2f}x (size: {current_size:.1f} -> {scaled_size:.1f})")
         except Exception as e:
             self.logger.error(f"Error applying font scaling to app: {e}")
@@ -702,10 +710,12 @@ class MainWindow(QMainWindow):
                  new_h += 80 # Approx header/footer height
             
             # Constraint: don't exceed screen size
-            from PySide6.QtGui import QGuiApplication
-            screen = QGuiApplication.primaryScreen().availableGeometry()
-            new_w = min(new_w, screen.width() - 40)
-            new_h = min(new_h, screen.height() - 40)
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app:
+                screen = app.primaryScreen().availableGeometry()  # type: ignore
+                new_w = min(new_w, screen.width() - 40)
+                new_h = min(new_h, screen.height() - 40)
             
             self.resize(new_w, new_h)
             self.player_page._show_info(f"Window Zoom: {int(scale*100)}%")
@@ -747,6 +757,7 @@ class MainWindow(QMainWindow):
                 return
         super().keyPressEvent(event)
 
+
     def _on_clear_playlist_triggered(self):
         """Handle Ctrl+W: Clear playlist."""
         if hasattr(self.library_page, 'playlist_view'):
@@ -759,14 +770,14 @@ class MainWindow(QMainWindow):
     def _populate_audio_tracks(self):
         """Build audio track submenu from VLC's available tracks."""
         self.audio_track_menu.clear()
-        tracks = self.player_page.vlc.get_audio_tracks()
+        tracks = self.player_page.vlc.get_audio_tracks() # type: ignore
         if not tracks:
             self.audio_track_menu.addAction("(No audio tracks)").setEnabled(False)
             return
         for track_id, name in tracks:
             action = self.audio_track_menu.addAction(name)
             action.setCheckable(True)
-            action.triggered.connect(lambda checked, tid=track_id: self.player_page.vlc.set_audio_track(tid))
+            action.triggered.connect(lambda checked, tid=track_id: self.player_page.vlc.set_audio_track(tid)) # type: ignore
 
     def _populate_subtitle_tracks(self):
         """Build subtitle track submenu from VLC's available tracks."""
@@ -776,14 +787,14 @@ class MainWindow(QMainWindow):
         )
         self.subtitle_track_menu.addSeparator()
 
-        tracks = self.player_page.vlc.get_subtitle_tracks()
+        tracks = self.player_page.vlc.get_subtitle_tracks() # type: ignore
         if not tracks:
             self.subtitle_track_menu.addAction("(No subtitle tracks)").setEnabled(False)
             return
         for track_id, name in tracks:
             action = self.subtitle_track_menu.addAction(name)
             action.setCheckable(True)
-            action.triggered.connect(lambda checked, tid=track_id: self.player_page.vlc.set_subtitle_track(tid))
+            action.triggered.connect(lambda checked, tid=track_id: self.player_page.vlc.set_subtitle_track(tid)) # type: ignore
 
     def _add_subtitle_file(self):
         """Load an external subtitle file into the player."""
@@ -792,7 +803,7 @@ class MainWindow(QMainWindow):
             "Subtitle Files (*.srt *.ass *.ssa *.sub *.vtt);;All Files (*)"
         )
         if path:
-            self.player_page.vlc.set_subtitle_file(path)
+            self.player_page.vlc.set_subtitle_file(path) # type: ignore
 
     # ─── View Menu Handlers ──────────────────────────────────
     
@@ -830,9 +841,9 @@ class MainWindow(QMainWindow):
         else:
             # Show mini player with current media if playing
             current_media = None
-            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing():
+            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing(): # type: ignore
                 # Get current media path if available
-                current_media = getattr(self.player_page.vlc, 'current_media', None)
+                current_media = getattr(self.player_page.vlc, 'current_media', None) # type: ignore
             
             self.mini_player_controller.show_mini_player(current_media)
             self.act_mini_player.setChecked(True)
@@ -849,10 +860,10 @@ class MainWindow(QMainWindow):
             # Show audio visualizer
             # Check if we're playing audio-only content
             is_audio_only = False
-            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing():
+            if hasattr(self.player_page, 'vlc') and self.player_page.vlc.is_playing(): # type: ignore
                 # Simple heuristic: if no video track, assume audio-only
                 # In real implementation, would check VLC track info
-                current_media = getattr(self.player_page.vlc, 'current_media', None)
+                current_media = getattr(self.player_page.vlc, 'current_media', None) # type: ignore
                 if current_media:
                     is_audio_only = any(current_media.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'])
             
@@ -896,13 +907,13 @@ class MainWindow(QMainWindow):
         """Jump to a specific time using HH:MM:SS dialog."""
         from src.ui.tools_dialogs import JumpToTimeDialog
         
-        curr = self.player_page.vlc.get_position()
-        dur = self.player_page.vlc.get_duration()
+        curr = self.player_page.vlc.get_position() # type: ignore
+        dur = self.player_page.vlc.get_duration() # type: ignore
         
         dlg = JumpToTimeDialog(curr, dur, self)
         if dlg.exec():
             seconds = dlg.get_time_seconds()
-            self.player_page.vlc.seek(float(seconds))
+            self.player_page.vlc.seek(float(seconds)) # type: ignore
 
     def _take_snapshot(self):
         """Take a snapshot of the current video frame and show preview."""
@@ -912,7 +923,7 @@ class MainWindow(QMainWindow):
         path = f"{pictures_dir}/{filename}"
         
         # Take the snapshot
-        if self.player_page.vlc.take_snapshot(path, 0, 0):
+        if self.player_page.vlc.take_snapshot(path, 0, 0): # type: ignore
             # Show preview dialog
             self._show_snapshot_preview(path)
         else:
@@ -923,7 +934,7 @@ class MainWindow(QMainWindow):
         """Show the snapshot preview dialog."""
         # Create dialog if not exists
         if not hasattr(self, '_snapshot_preview_dialog') or not self._snapshot_preview_dialog:
-            self._snapshot_preview_dialog = SnapshotPreviewDialog(self)
+            self._snapshot_preview_dialog: Any = SnapshotPreviewDialog(self)
         
         # Show the snapshot
         self._snapshot_preview_dialog.show_snapshot(snapshot_path)
@@ -1322,7 +1333,7 @@ class MainWindow(QMainWindow):
     def _populate_stereo_mode(self):
         self.stereo_mode_menu.clear()
         # Common modes from vlc.AudioOutputChannel
-        import vlc
+        import vlc  # type: ignore
         modes = [
             ("Stereo", vlc.AudioOutputChannel.Stereo),
             ("Mono", vlc.AudioOutputChannel.Mono),
@@ -1610,11 +1621,32 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event):
-        """Stop discovery and cleanup on close."""
-        # Save window geometry before closing
-        self._save_geometry()
-        
-        self.player_page.vlc.stop_renderer_discovery()
+        """Handle application close event to perform cleanups."""
+        try:
+            self.logger.info("Application shutting down, performing cleanup...")
+            
+            # 1. Autosave final state
+            self._autosave_state()
+            
+            # 2. Save window geometry before closing
+            self._save_geometry()
+            
+            # 3. Cleanup transcoder queue threads
+            if hasattr(self, 'transcoder_page') and hasattr(self.transcoder_page, 'queue'):
+                self.transcoder_page.queue.cleanup()
+                
+            # 4. Cleanup background threads managed by ThreadManager
+            from src.core.thread_manager import thread_manager
+            thread_manager.cleanup()
+            
+            # 5. Stop playback and discovery
+            if hasattr(self, 'player_page') and hasattr(self.player_page, 'vlc'):
+                self.player_page.vlc.stop_renderer_discovery()
+                self.player_page.vlc.stop()
+            
+        except Exception as e:
+            self.logger.error(f"Error during shutdown cleanup: {e}")
+            
         super().closeEvent(event)
 
 

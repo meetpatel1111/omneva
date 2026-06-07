@@ -26,7 +26,7 @@ class FiltersTab(QWidget):
         row.setSpacing(12)
         lbl = QLabel(label_text + ":")
         lbl.setFixedWidth(LABEL_WIDTH)
-        lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         combo = QComboBox()
         combo.addItems(items)
         combo.setFixedHeight(28)

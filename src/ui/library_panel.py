@@ -2,7 +2,7 @@
 
 import os
 import hashlib
-from typing import Optional
+from typing import Dict, Any, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeView, QSplitter, QFileDialog, QHeaderView, QFrame,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QFileSystemModel
 
 from src.core.ffprobe_service import FFprobeService
 from src.core.ffmpeg_service import FFmpegService
-from src.core.utils import is_media_file, get_icon
+from src.core.utils import is_media_file
 from src.core.playlist_model import PlaylistModel
 from src.ui.network_bookmarks import NetworkBookmarksPanel
 from src.ui.youtube_downloader import YouTubeDownloaderPanel
@@ -46,7 +46,7 @@ class ThumbnailCache:
         thumbnail_path = self.get_thumbnail_path(file_path)
         return os.path.exists(thumbnail_path)
     
-    def get_thumbnail(self, file_path: str) -> str:
+    def get_thumbnail(self, file_path: str) -> Optional[str]:
         """Get thumbnail path if exists, None otherwise."""
         if self.has_thumbnail(file_path):
             return self.get_thumbnail_path(file_path)
@@ -196,6 +196,8 @@ class FileBrowserWidget(QWidget):
     """Refactored File Browser with Metadata Splitter."""
 
     play_requested = Signal(str)
+    request_thumbnail = Signal(str)
+    request_metadata = Signal(str)
 
     VIEW_ICONS = 0
     VIEW_DETAILS = 1
@@ -209,22 +211,27 @@ class FileBrowserWidget(QWidget):
         
         # Setup thumbnail system
         self.thumbnail_cache = ThumbnailCache()
-        self._thumbnail_thread = None
-        self._thumbnail_worker = None
+        
+        from src.core.thread_manager import thread_manager
+        
+        self._thumbnail_worker = ThumbnailWorker(self.ffmpeg, self.thumbnail_cache)
+        thread_manager.start_worker(self._thumbnail_worker)
+        self._thumbnail_worker.thumbnail_ready.connect(self._on_thumbnail_ready)
+        self._thumbnail_worker.error_occurred.connect(self._on_thumbnail_error)
+        self.request_thumbnail.connect(self._thumbnail_worker.generate_thumbnail)
+        
+        self._ffprobe_worker = LibraryFFprobeWorker(self.ffprobe)
+        thread_manager.start_worker(self._ffprobe_worker)
+        self._ffprobe_worker.metadata_ready.connect(self._on_metadata_ready)
+        self._ffprobe_worker.error_occurred.connect(self._on_ffprobe_error)
+        self.request_metadata.connect(self._ffprobe_worker.get_metadata)
 
         self._setup_ui()
-        self._setup_thumbnail_system()
         self._connect_signals()
 
         # Open home directory by default
         home = QDir.homePath()
         self._navigate_to(home)
-
-    def _setup_thumbnail_system(self):
-        """Setup thumbnail generation system (disabled due to QThread destruction issues)."""
-        # Threading disabled temporarily - using synchronous operations
-        self._thumbnail_thread = None
-        self._thumbnail_worker = None
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -363,17 +370,26 @@ class FileBrowserWidget(QWidget):
         path = self.fs_model.filePath(index)
         if os.path.isfile(path) and is_media_file(path):
             self._current_path = path
-            # Generate thumbnail for this file
-            self._generate_thumbnail_sync(path)
-            # Use synchronous FFprobe operation (temporary fallback)
-            try:
-                meta = self.ffprobe.get_metadata(path)
-                self.metadata_panel.show_metadata(meta, path)
-            except Exception as e:
-                print(f"Error getting metadata for {path}: {e}")
+            self.request_thumbnail.emit(path)
+            self.request_metadata.emit(path)
         else:
             self._current_path = None
             self.metadata_panel.clear()
+
+    def _on_metadata_ready(self, path: str, meta: dict):
+        if self._current_path == path:
+            self.metadata_panel.show_metadata(meta, path)
+
+    def _on_ffprobe_error(self, path: str, error_message: str):
+        if self._current_path == path:
+            print(f"Error getting metadata for {path}: {error_message}")
+            
+    def _on_thumbnail_ready(self, file_path: str, thumbnail_path: str):
+        # Could force a refresh of the item view here
+        pass
+
+    def _on_thumbnail_error(self, file_path: str, error_message: str):
+        print(f"Thumbnail generation error for {file_path}: {error_message}")
     
     def _update_visible_thumbnails(self):
         """Generate thumbnails for currently visible media files."""
@@ -384,8 +400,7 @@ class FileBrowserWidget(QWidget):
                 if index.isValid():
                     path = self.fs_model.filePath(index)
                     if is_media_file(path) and not self.thumbnail_cache.has_thumbnail(path):
-                        # Generate thumbnail in background (synchronous for now)
-                        self._generate_thumbnail_sync(path)
+                        self.request_thumbnail.emit(path)
 
     def _on_item_double_clicked(self, index):
         path = self.fs_model.filePath(index)
@@ -483,11 +498,6 @@ class LibraryPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("libraryPanel")
 
-        # FFprobe worker setup (disabled temporarily due to threading issues)
-        self.ffprobe = FFprobeService()
-        self._ffprobe_worker = None
-        self._ffprobe_thread = None
-
         self._setup_ui()
 
     def _setup_ui(self):
@@ -557,87 +567,11 @@ class LibraryPanel(QWidget):
         
         layout.addWidget(self.stack, 1)
         
-        # FFprobe worker signals (disabled temporarily)
-        if self._ffprobe_worker:
-            self._ffprobe_worker.metadata_ready.connect(self._on_metadata_ready)
-            self._ffprobe_worker.error_occurred.connect(self._on_ffprobe_error)
-
     def set_playlist_model(self, model: PlaylistModel):
         """Connect to shared playlist model."""
         self.playlist_page.set_model(model)
 
-    def _on_metadata_ready(self, path: str, meta: dict):
-        """Handle metadata received from FFprobe worker."""
-        try:
-            if hasattr(self, 'browser_page') and hasattr(self.browser_page, 'metadata_panel'):
-                self.browser_page.metadata_panel.show_metadata(meta, path)
-        except Exception as e:
-            print(f"Error processing metadata for {path}: {e}")
 
-    def _on_ffprobe_error(self, path: str, error_message: str):
-        """Handle FFprobe error from worker thread."""
-        print(f"Error getting metadata for {path}: {error_message}")
-
-    def _on_search_changed(self, text: str):
-        """Handle search text changes to filter files."""
-        # Set filter pattern for the proxy model
-        if text.strip():
-            self.proxy_model.setFilterRegularExpression(text)
-        else:
-            self.proxy_model.setFilterRegularExpression("")
-    
-    def _generate_thumbnail_sync(self, file_path: str) -> str:
-        """Generate thumbnail synchronously (temporary fallback)."""
-        if not is_media_file(file_path):
-            return None
-            
-        # Check if thumbnail already exists
-        if self.thumbnail_cache.has_thumbnail(file_path):
-            return self.thumbnail_cache.get_thumbnail(file_path)
-        
-        # Generate thumbnail synchronously
-        thumbnail_path = self.thumbnail_cache.get_thumbnail_path(file_path)
-        try:
-            success = self.ffmpeg.generate_thumbnail(
-                input_path=file_path,
-                output_path=thumbnail_path,
-                timestamp=1.0,  # Generate thumbnail at 1 second
-                width=160
-            )
-            if success:
-                return thumbnail_path
-        except Exception:
-            pass
-        return None
-    
-    def _get_file_icon_with_thumbnail(self, file_path: str) -> str:
-        """Get file icon, with thumbnail for media files."""
-        if is_media_file(file_path):
-            thumbnail_path = self._generate_thumbnail_sync(file_path)
-            if thumbnail_path and os.path.exists(thumbnail_path):
-                return thumbnail_path
-        
-        # Fallback to default file icon
-        return get_icon(file_path)
-    
-    def _on_thumbnail_ready(self, file_path: str, thumbnail_path: str):
-        """Handle thumbnail generation completion."""
-        # Update the file view to show the new thumbnail
-        # This would require a custom model implementation for full functionality
-        pass
-    
-    def _on_thumbnail_error(self, file_path: str, error_message: str):
-        """Handle thumbnail generation error."""
-        print(f"Thumbnail generation error for {file_path}: {error_message}")
-    
-    def cleanup(self):
-        """Clean up resources including thumbnail thread."""
-        try:
-            if hasattr(self, '_thumbnail_thread') and self._thumbnail_thread and self._thumbnail_thread.isRunning():
-                self._thumbnail_thread.quit()
-                self._thumbnail_thread.wait(1000)  # Wait up to 1 second for thread to finish
-        except Exception as e:
-            print(f"Error cleaning up thumbnail thread: {e}")
 
     def _on_sidebar_changed(self, current, previous):
         if not current:

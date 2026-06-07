@@ -142,7 +142,7 @@ class FFprobeService:
         """Parse raw ffprobe JSON into structured format."""
         fmt = data.get("format", {})
 
-        result = {
+        result: dict[str, Any] = {
             "file_path": file_path,
             "file_name": os.path.basename(file_path),
             "format": {

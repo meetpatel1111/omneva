@@ -18,7 +18,7 @@ class SubtitleTrackRow(QFrame):
     def __init__(self, track_label: str = "Track 1", is_external: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("subtitleTrackRow")
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setFixedHeight(44)
         self._is_external = is_external
         self._external_path = ""

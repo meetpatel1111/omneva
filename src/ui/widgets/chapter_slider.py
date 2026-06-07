@@ -93,7 +93,7 @@ class ChapterSlider(QSlider):
             return
             
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Get slider geometry
         opt = QStyleOptionSlider()
@@ -101,7 +101,7 @@ class ChapterSlider(QSlider):
         
         # Calculate groove rect (the track area)
         groove_rect = self.style().subControlRect(
-            QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self
+            QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderGroove, self
         )
         
         if not groove_rect.isValid():
@@ -142,7 +142,7 @@ class ChapterSlider(QSlider):
                 
                 # Calculate text position
                 text_rect = painter.boundingRect(
-                    QRect(), Qt.AlignCenter, chapter['title']
+                    QRect(), Qt.AlignmentFlag.AlignCenter, chapter['title']
                 )
                 
                 # Position text above the tick

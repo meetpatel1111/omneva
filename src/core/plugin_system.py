@@ -3,6 +3,7 @@
 import os
 import sys
 import importlib
+import importlib.util
 import inspect
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Type
@@ -24,7 +25,8 @@ class BasePlugin(ABC):
     # Plugin capabilities
     capabilities: List[str] = []
     
-    def __init__(self):
+    def __init__(self, manager=None):
+        self._plugin_manager: Any = manager
         self.logger = get_logger(f'plugin.{self.name}')
         self.enabled = False
         self.initialized = False
@@ -166,6 +168,8 @@ class PluginManager(QObject):
             # Import the module
             module_name = os.path.splitext(os.path.basename(plugin_path))[0]
             spec = importlib.util.spec_from_file_location(module_name, plugin_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot find plugin loader for {plugin_path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             

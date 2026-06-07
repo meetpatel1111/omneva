@@ -352,6 +352,7 @@ class PlayerWidget(QWidget):
     jump_to_time_requested = Signal()
     resize_requested = Signal(float)
     help_requested = Signal()
+    request_metadata = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -381,10 +382,15 @@ class PlayerWidget(QWidget):
         self._loop_b_position = -1.0
         self._ab_loop_state = "idle"  # idle, set_a, set_b, active
 
-        # FFprobe worker setup (disabled due to QThread destruction issues)
-        self._ffprobe_thread = None
-        self._ffprobe_worker = None
+        # FFprobe worker setup
+        from src.core.thread_manager import thread_manager
+        
         self.ffprobe = FFprobeService()
+        self._ffprobe_worker = PlayerFFprobeWorker(self.ffprobe)
+        thread_manager.start_worker(self._ffprobe_worker)
+        self._ffprobe_worker.metadata_ready.connect(self._on_metadata_ready)
+        self._ffprobe_worker.error_occurred.connect(self._on_ffprobe_error)
+        self.request_metadata.connect(self._ffprobe_worker.get_metadata)
 
         # Initialize audio visualizer controller
         self.audio_visualizer = AudioVisualizerController(self)
@@ -441,6 +447,9 @@ class PlayerWidget(QWidget):
             if "error" not in meta:
                 dur = meta["format"]["duration"]
                 self.controls.lbl_duration.setText(format_duration(dur))
+                
+                # Update model with metadata
+                self.playlist_model.update_metadata(path, duration=dur)
                 
                 # Load chapters into seek slider
                 chapters = meta.get("chapters", [])
@@ -593,20 +602,8 @@ class PlayerWidget(QWidget):
         # Trigger autosave after loading new file
         self._autosave_state()
 
-        # Get metadata for duration using threaded worker
-        if self._ffprobe_worker:
-            self._ffprobe_worker.get_metadata(file_path)
-        else:
-            # Fallback to synchronous operation
-            try:
-                meta = self.ffprobe.get_metadata(file_path)
-                if "error" not in meta:
-                    dur = meta["format"]["duration"]
-                    self.controls.lbl_duration.setText(format_duration(dur))
-                    # Update model with metadata
-                    self.playlist_model.update_metadata(file_path, duration=dur)
-            except Exception as e:
-                self.logger.error(f"Error getting metadata for {file_path}: {e}")
+        # Request metadata asynchronously
+        self.request_metadata.emit(file_path)
             
     def _play_next(self):
         count = self.playlist_model.rowCount()

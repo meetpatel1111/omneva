@@ -15,7 +15,7 @@ class DownloadDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Downloading Dependencies")
         self.setFixedSize(450, 200)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         self.needs_vlc = needs_vlc
         self.needs_ffmpeg = needs_ffmpeg
@@ -30,7 +30,7 @@ class DownloadDialog(QDialog):
         self.downloader.all_finished.connect(self._on_finished)
 
         # Dictionary to track progress per task
-        self.task_progress = {}
+        self.task_progress: dict = {}
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)

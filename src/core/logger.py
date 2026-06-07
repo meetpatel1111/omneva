@@ -3,6 +3,7 @@
 import logging
 import logging.handlers
 from pathlib import Path
+from typing import Optional
 
 
 class OmnevaLogger:
@@ -46,7 +47,7 @@ class OmnevaLogger:
         self.logger.addHandler(file_handler)
         self.logger.addHandler(console_handler)
     
-    def get_logger(self, name: str = None) -> logging.Logger:
+    def get_logger(self, name: Optional[str] = None) -> logging.Logger:
         """Get a logger instance with optional name."""
         if name:
             return self.logger.getChild(name)
@@ -56,6 +57,6 @@ class OmnevaLogger:
 # Global logger instance
 _logger_instance = OmnevaLogger()
 
-def get_logger(name: str = None) -> logging.Logger:
+def get_logger(name: Optional[str] = None) -> logging.Logger:
     """Get the Omneva logger instance."""
     return _logger_instance.get_logger(name)

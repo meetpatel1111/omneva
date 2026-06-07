@@ -1,10 +1,8 @@
 """Sync Widget — Audio and Subtitle Synchronization."""
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, 
-    QSpinBox, QPushButton
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QPushButton
 )
-from PySide6.QtCore import Qt
 
 class SyncWidget(QWidget):
     """Audio and Subtitle Synchronization Widget."""

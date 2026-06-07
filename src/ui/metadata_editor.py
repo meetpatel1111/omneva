@@ -3,18 +3,13 @@
 import os
 import subprocess
 import json
-from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QTextEdit, QGroupBox, QMessageBox, QFileDialog, QFormLayout,
-    QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QComboBox, QSpinBox, QCheckBox, QScrollArea, QFrame,
-    QProgressBar, QSplitter, QToolButton, QMenu, QAction
+    QTabWidget, QSpinBox
 )
-from PySide6.QtCore import Qt, Signal, QThread, QObject, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtCore import Signal, QThread, QObject
 from src.core.logger import get_logger
-from src.core.storage import storage
 
 
 class MetadataWorker(QObject):
@@ -105,7 +100,7 @@ class MetadataWorker(QObject):
                 elif key_lower == 'rating':
                     try:
                         metadata[key_lower] = int(float(value))
-                    except:
+                    except Exception:
                         pass
                 elif key_lower == 'year':
                     metadata[key_lower] = value

@@ -1,6 +1,7 @@
 """Queue Manager — Background job processing with QThread workers."""
 
 import uuid
+from typing import Optional, Any
 from PySide6.QtCore import QObject, QThread, Signal
 
 from src.core.ffmpeg_service import FFmpegService, TranscodeJob
@@ -45,7 +46,7 @@ class QueueManager(QObject):
     job_failed = Signal(str, str)        # job_id, error
     queue_empty = Signal()
 
-    def __init__(self, ffmpeg_service: FFmpegService = None, max_concurrent: int = 1):
+    def __init__(self, ffmpeg_service: Optional[FFmpegService] = None, max_concurrent: int = 1):
         super().__init__()
         self.logger = get_logger('queue_manager')
         self.ffmpeg = ffmpeg_service or FFmpegService()
@@ -60,7 +61,7 @@ class QueueManager(QObject):
         self.persistence = QueuePersistence()
         self.post_encode_actions = PostEncodeActions()
         self._load_pending_jobs()
-        self._post_encode_settings = {}  # Will be updated from UI
+        self._post_encode_settings: dict[str, Any] = {}  # Will be updated from UI
 
     def _load_pending_jobs(self):
         """Load pending jobs from persistence database."""
@@ -85,7 +86,7 @@ class QueueManager(QObject):
         self,
         input_path: str,
         output_path: str,
-        options: dict = None,
+        options: Optional[dict] = None,
         duration: float = 0,
     ) -> str:
         """Add a job to the queue. Returns job_id."""

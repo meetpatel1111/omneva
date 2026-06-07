@@ -6,7 +6,7 @@ from src.ui.update_dialog import show_update_dialog, show_no_update_dialog
 from src.core.logger import get_logger
 
 
-def initialize_update_system(main_window, current_version: str = "1.4.0"):
+def initialize_update_system(main_window, current_version: str = "1.4.1"):
     """Initialize the complete update system."""
     logger = get_logger('update_integration')
     

@@ -2,7 +2,7 @@
 ; Generated for Inno Setup
 
 #define MyAppName "Omneva"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.4.1"
 #define MyAppPublisher "Meetkumar Patel"
 #define MyAppURL "https://github.com/meetpatel1111/omneva"
 #define MyAppExeName "Omneva.exe"

@@ -3,7 +3,6 @@ import os
 import sys
 import shutil
 import subprocess
-import tempfile
 import argparse
 
 # Define paths
@@ -160,11 +159,10 @@ def generate_required_icons():
             success = False
     
     # Clean up PNG files
-    import shutil
     for png_path in png_paths:
         try:
             os.remove(png_path)
-        except:
+        except Exception:
             pass
     
     return success
@@ -248,8 +246,8 @@ def build_application(build_mode='onedir'):
         args.append('--osx-bundle-name=Omneva')
         args.append('--osx-bundle-info=CFBundleName:Omneva')
         args.append('--osx-bundle-info=CFBundleDisplayName:Omneva Media Player')
-        args.append('--osx-bundle-info=CFBundleVersion:1.4.0')
-        args.append('--osx-bundle-info=CFBundleShortVersionString:1.4.0')
+        args.append('--osx-bundle-info=CFBundleVersion:1.4.1')
+        args.append('--osx-bundle-info=CFBundleShortVersionString:1.4.1')
         args.append('--osx-bundle-info=CFBundleIdentifier:com.omneva.omneva')
         # Icon (ICNS)
         icon_path = os.path.join(assets_src, 'icon.icns')
@@ -290,7 +288,7 @@ def create_windows_portable():
         # One-file mode - copy the single executable
         shutil.copy2(onefile_exe, os.path.join(portable_path, 'Omneva.exe'))
         # Create launcher script for single file
-        launcher_script = f"""@echo off
+        launcher_script = """@echo off
 cd /d "%~dp0"
 start Omneva.exe
 """
@@ -298,7 +296,7 @@ start Omneva.exe
         # One-dir mode - copy the entire directory
         shutil.copytree(onedir_dir, os.path.join(portable_path, 'Omneva'))
         # Create launcher script for directory
-        launcher_script = f"""@echo off
+        launcher_script = """@echo off
 cd /d "%~dp0Omneva"
 start Omneva.exe
 """
@@ -320,7 +318,7 @@ def create_windows_installer():
             print("Windows installer created successfully")
         else:
             print("Inno Setup not found - skipping Windows installer")
-    except:
+    except Exception:
         print("Inno Setup not found - skipping Windows installer")
 
 def create_windows_portable_onefile():
@@ -341,7 +339,7 @@ def create_windows_portable_onefile():
         shutil.copy2(onefile_exe, os.path.join(portable_path, 'Omneva.exe'))
         
         # Create launcher script for single file
-        launcher_script = f"""@echo off
+        launcher_script = """@echo off
 cd /d "%~dp0"
 start Omneva.exe
 """
@@ -419,7 +417,7 @@ MimeType=audio/mp3;audio/mp4;audio/mpeg;audio/ogg;audio/wav;video/mp4;video/avi;
         f.write(desktop_file)
     
     # Create launcher script
-    launcher_script = f"""#!/bin/bash
+    launcher_script = """#!/bin/bash
 cd "$(dirname "$0")"
 ./omneva "$@"
 """
@@ -458,7 +456,7 @@ def create_macos_pkg():
     
     try:
         subprocess.run(['pkgbuild', '--root', app_bundle_path, '--identifier', 'com.omneva.omneva', 
-                       '--version', '1.4.0', '--install-location', '/Applications', 
+                       '--version', '1.4.1', '--install-location', '/Applications', 
                        'Omneva-MacOS-Installer.pkg'], cwd=base_dir, check=True)
         print("PKG installer created: Omneva-MacOS-Installer.pkg")
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -495,7 +493,7 @@ def create_appimage():
         try:
             # Try to convert SVG to PNG using ImageMagick
             subprocess.run(['convert', icon_src, '-resize', '256x256', icon_dst], check=False, capture_output=True)
-        except:
+        except Exception:
             # Fallback: copy SVG as PNG
             shutil.copy2(icon_src, icon_dst)
     
@@ -532,7 +530,7 @@ Comment=A powerful, feature-rich media player
             subprocess.run(['wget', '-q', 'https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage'], 
                          cwd=base_dir, check=True)
             os.chmod(appimagetool, 0o755)
-        except:
+        except Exception:
             print("Warning: Could not download appimagetool. Skipping AppImage creation.")
             return
     
@@ -566,7 +564,7 @@ def create_deb_package():
     
     # Create control file
     control_content = '''Package: omneva
-Version: 1.4.0
+Version: 1.4.1
 Section: multimedia
 Priority: optional
 Architecture: amd64
@@ -669,7 +667,7 @@ def clean_build_directories():
             for file_path in glob.glob(os.path.join(base_dir, artifact)):
                 os.remove(file_path)
                 print(f"Cleaned: {file_path}")
-        except:
+        except Exception:
             pass
 
 def main():
@@ -704,23 +702,23 @@ def main():
     
     for platform in platforms:
         if platform == 'windows':
-            print(f"  Windows:")
-            print(f"    - portable_windows/ (portable)")
-            print(f"    - installer_output/ (installer)")
+            print("  Windows:")
+            print("    - portable_windows/ (portable)")
+            print("    - installer_output/ (installer)")
         elif platform == 'linux':
-            print(f"  Linux:")
-            print(f"    - linux_package_cross/ (binary)")
+            print("  Linux:")
+            print("    - linux_package_cross/ (binary)")
             if args.package in ['all', 'appimage']:
-                print(f"    - *.AppImage (AppImage)")
+                print("    - *.AppImage (AppImage)")
             if args.package in ['all', 'deb']:
-                print(f"    - *.deb (DEB package)")
+                print("    - *.deb (DEB package)")
         elif platform == 'macos':
-            print(f"  macOS:")
-            print(f"    - macos_package_cross/ (app bundle)")
+            print("  macOS:")
+            print("    - macos_package_cross/ (app bundle)")
             if args.package in ['all', 'dmg']:
-                print(f"    - *.dmg (DMG installer)")
+                print("    - *.dmg (DMG installer)")
             if args.package in ['all', 'pkg']:
-                print(f"    - *.pkg (PKG installer)")
+                print("    - *.pkg (PKG installer)")
 
 # Code Signing Functions
 def sign_build_artifacts_windows(cert_path=None):

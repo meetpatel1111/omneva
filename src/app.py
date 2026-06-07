@@ -3,7 +3,7 @@
 import os
 import sys
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
 from src.main_window import MainWindow
@@ -21,7 +21,7 @@ class OmnevaApp:
 
         self.app = QApplication(argv)
         self.app.setApplicationName("Omneva")
-        self.app.setApplicationVersion("1.4.0")
+        self.app.setApplicationVersion("1.4.1")
         self.app.setOrganizationName("Omneva")
         self.logger = get_logger('app')
         

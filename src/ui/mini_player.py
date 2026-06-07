@@ -2,12 +2,10 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-    QFrame, QSizePolicy, QGraphicsOpacityEffect
+    QFrame, QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QPropertyAnimation, QRect
-from PySide6.QtGui import QIcon, QPalette, QColor
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation
 from src.core.logger import get_logger
-from src.core.vlc_engine import VLCEngine
 
 
 class MiniPlayer(QWidget):
@@ -267,7 +265,7 @@ class MiniPlayer(QWidget):
         if self.is_playing and self.vlc_engine:
             try:
                 self.vlc_engine.stop()
-            except:
+            except Exception:
                 pass
         event.accept()
 

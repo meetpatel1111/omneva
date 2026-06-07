@@ -3,7 +3,8 @@
 import os
 import sys
 import shutil
-import subprocess
+from src.core.storage import storage
+from PySide6.QtGui import QIcon
 
 
 # Supported media extensions
@@ -67,8 +68,6 @@ def format_bitrate(bps: int) -> str:
         return f"{kbps / 1000:.1f} Mbps"
     return f"{kbps:.0f} kbps"
 
-
-from src.core.storage import storage
 
 def get_local_deps_dir() -> str:
     """Get the local directory where dependencies might be downloaded."""
@@ -166,8 +165,6 @@ def find_vlc_lib() -> str | None:
     return None
 
 
-
-from PySide6.QtGui import QIcon
 
 def get_icon(name: str) -> QIcon:
     """

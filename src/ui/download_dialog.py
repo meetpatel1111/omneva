@@ -1,7 +1,5 @@
 """Download progress dialog for fetching missing dependencies."""
 
-import os
-import sys
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QProgressBar, QPushButton, QHBoxLayout,
     QMessageBox
@@ -44,8 +42,10 @@ class DownloadDialog(QDialog):
         layout.addWidget(title)
 
         msg = []
-        if self.needs_vlc: msg.append("VLC Media Player")
-        if self.needs_ffmpeg: msg.append("FFmpeg & FFprobe")
+        if self.needs_vlc:
+            msg.append("VLC Media Player")
+        if self.needs_ffmpeg:
+            msg.append("FFmpeg & FFprobe")
         
         msg_str = '\n- '.join(msg)
         info = QLabel(f"Downloading required files to play and transcode media:\n- {msg_str}\n\nThis will only happen once.")

@@ -1,12 +1,11 @@
 """Video Settings Tab for Transcoder."""
 
-import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QRadioButton, QSlider, QSpinBox, QCheckBox, QLineEdit,
-    QGroupBox, QFormLayout, QFrame, QToolTip
+    QGroupBox, QFormLayout, QFrame
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal
 
 from src.core.ffmpeg_service import FFmpegService
 
@@ -186,7 +185,7 @@ class VideoSettingsTab(QWidget):
         try:
             self.hardware_encoders = self.ffmpeg.get_available_hardware_encoders()
             self._update_encoder_availability()
-        except Exception as e:
+        except Exception:
             # If detection fails, assume no hardware encoders available
             self.hardware_encoders = {'nvenc': False, 'qsv': False, 'videotoolbox': False, 'amf': False}
             self._update_encoder_availability()

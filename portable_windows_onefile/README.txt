@@ -23,4 +23,4 @@ No installation required! Simply extract this folder and run Omneva.exe.
 This portable version includes all dependencies and doesn't require installation.
 Settings and data are stored in your user profile directory.
 
-Version: 1.3.0
+Version: 1.2.0

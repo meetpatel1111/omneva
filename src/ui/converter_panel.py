@@ -5,9 +5,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QFileDialog, QFrame, QProgressBar, QLineEdit
 )
-from PySide6.QtCore import Qt, Signal, QSettings
+from PySide6.QtCore import Qt, Signal
 
-from src.core.ffmpeg_service import FFmpegService, PRESETS
+from src.core.ffmpeg_service import FFmpegService
 from src.core.ffprobe_service import FFprobeService
 from src.core.queue_manager import QueueManager
 from src.core.storage import storage
@@ -296,7 +296,7 @@ class ConverterPanel(QWidget):
 
     def _on_failed(self, job_id: str, error: str):
         self._completed_count += 1
-        self.lbl_status.setText(f"⚠ Error on file (continuing...)")
+        self.lbl_status.setText("⚠ Error on file (continuing...)")
 
     def _on_all_done(self):
         self.progress_bar.setValue(100)

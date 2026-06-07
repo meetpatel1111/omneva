@@ -1,11 +1,10 @@
 """Queue Panel — Dedicated job queue view for all transcoding/conversion jobs."""
 
-import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QProgressBar, QScrollArea, QCheckBox
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from src.core.logger import get_logger
 from src.core.recovery_service import get_recovery_service
 

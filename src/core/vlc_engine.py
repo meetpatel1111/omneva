@@ -3,6 +3,7 @@
 import sys
 import os
 import vlc
+from typing import Optional
 
 from PySide6.QtCore import QObject, Signal, QTimer
 from .logger import get_logger
@@ -157,7 +158,7 @@ class VLCEngine(QObject):
         self.media_changed.emit(file_path)
 
 
-    def play(self, file_path: str = None):
+    def play(self, file_path: Optional[str] = None):
         """Play a file or resume current media."""
         if file_path:
             self.load(file_path)
@@ -452,10 +453,14 @@ class VLCEngine(QObject):
         Adjust crop by delta pixels on a specific side.
         side: 'top', 'bottom', 'left', 'right'
         """
-        if side == 'top': self._crop_top = max(0, self._crop_top + delta)
-        elif side == 'bottom': self._crop_bottom = max(0, self._crop_bottom + delta)
-        elif side == 'left': self._crop_left = max(0, self._crop_left + delta)
-        elif side == 'right': self._crop_right = max(0, self._crop_right + delta)
+        if side == 'top':
+            self._crop_top = max(0, self._crop_top + delta)
+        elif side == 'bottom':
+            self._crop_bottom = max(0, self._crop_bottom + delta)
+        elif side == 'left':
+            self._crop_left = max(0, self._crop_left + delta)
+        elif side == 'right':
+            self._crop_right = max(0, self._crop_right + delta)
 
         # Get video size to calculate final geometry
         width, height = self.get_video_size()
@@ -552,7 +557,8 @@ class VLCEngine(QObject):
     def cycle_audio_track(self):
         """Cycle through available audio tracks."""
         tracks = self.player.audio_get_track_description()
-        if not tracks or len(tracks) <= 1: return None
+        if not tracks or len(tracks) <= 1:
+            return None
         
         current = self.player.audio_get_track()
         ids = [t[0] for t in tracks]
@@ -571,7 +577,8 @@ class VLCEngine(QObject):
     def cycle_subtitle_track(self):
         """Cycle through available subtitle tracks."""
         tracks = self.player.video_get_spu_description()
-        if not tracks: return None
+        if not tracks:
+            return None
         
         current = self.player.video_get_spu()
         ids = [t[0] for t in tracks]
@@ -587,7 +594,8 @@ class VLCEngine(QObject):
     def cycle_subtitle_reverse(self):
         """Cycle through available subtitle tracks in reverse."""
         tracks = self.player.video_get_spu_description()
-        if not tracks: return None
+        if not tracks:
+            return None
         
         current = self.player.video_get_spu()
         ids = [t[0] for t in tracks]
@@ -604,7 +612,8 @@ class VLCEngine(QObject):
         """Cycle through zoom levels."""
         zooms = [0.0, 0.25, 0.5, 1.0, 2.0] 
         current = self.player.video_get_scale()
-        if current <= 0: current = 1.0
+        if current <= 0:
+            current = 1.0
         
         diffs = [abs(z - current) for z in zooms]
         idx = diffs.index(min(diffs))
@@ -621,7 +630,8 @@ class VLCEngine(QObject):
 
     def toggle_deinterlace(self):
         """Toggle deinterlacing on/off (defaults to yadif)."""
-        if not hasattr(self, '_deinterlace_on'): self._deinterlace_on = False
+        if not hasattr(self, '_deinterlace_on'):
+            self._deinterlace_on = False
         self._deinterlace_on = not self._deinterlace_on
         
         mode = "yadif" if self._deinterlace_on else None
@@ -631,7 +641,8 @@ class VLCEngine(QObject):
     def cycle_deinterlace_modes(self):
         """Cycle through different deinterlace modes."""
         modes = ["discard", "blend", "mean", "bob", "linear", "x", "yadif", "yadif2x", "phosphor", "ivtc"]
-        if not hasattr(self, '_deinterlace_idx'): self._deinterlace_idx = -1
+        if not hasattr(self, '_deinterlace_idx'):
+            self._deinterlace_idx = -1
         
         self._deinterlace_idx = (self._deinterlace_idx + 1) % len(modes)
         mode = modes[self._deinterlace_idx]
@@ -644,7 +655,8 @@ class VLCEngine(QObject):
         Toggle wallpaper mode.
         Note: This is highly dependent on VOUT (DirectX/Direct3D).
         """
-        if not hasattr(self, '_wallpaper_on'): self._wallpaper_on = False
+        if not hasattr(self, '_wallpaper_on'):
+            self._wallpaper_on = False
         self._wallpaper_on = not self._wallpaper_on
         
         # In LibVLC, this often requires setting an option at media player creation.
@@ -685,13 +697,12 @@ class VLCEngine(QObject):
         """
         # Current viewpoint (yaw, pitch, roll, fov)
         # FOV is in degrees. VLC default is usually 80.
-        if not hasattr(self, '_fov'): self._fov = 80.0
+        if not hasattr(self, '_fov'):
+            self._fov = 80.0
         
         self._fov = max(10, min(150, self._fov + delta))
         self.player.video_set_viewpoint(0, 0, 0, self._fov, False)
         return f"FOV: {int(self._fov)}°"
-
-        return scale
 
     def increase_scale(self):
         """Increase scale factor by 0.1."""
@@ -853,17 +864,6 @@ class VLCEngine(QObject):
         self.player.video_set_adjust_int(option_id, value)
 
     # ─── Synchronization ───
-
-    def set_subtitle_delay(self, delay_ms):
-        """Set subtitle delay in milliseconds."""
-        # LibVLC uses microseconds for SPU delay
-        self.player.video_set_spu_delay(delay_ms * 1000)
-        self._spu_delay = delay_ms
-        return delay_ms
-
-    def get_subtitle_delay(self):
-        """Get subtitle delay in milliseconds."""
-        return self._spu_delay
 
     def bookmark_audio_sync(self):
         """Bookmark current playback time for audio sync."""
@@ -1110,7 +1110,7 @@ class VLCEngine(QObject):
                 if str(status) != 'done':
                     # Use local | network to be safe
                     m.parse_with_options(vlc.MediaParseFlag.local | vlc.MediaParseFlag.network, 0)
-            except:
+            except Exception:
                 pass
             return m.get_meta(meta_type)
         return None
@@ -1136,11 +1136,11 @@ class VLCEngine(QObject):
             else:
                 try:
                     libvlc = ctypes.CDLL("libvlc.dll")
-                except:
+                except Exception:
                     try:
                         libvlc = ctypes.CDLL("libvlc")
-                    except:
-                        pass
+                    except Exception:
+                            pass
             
             if not libvlc or not hasattr(libvlc, 'libvlc_media_tracks_get'):
                 # Fallback to python-vlc if we can't load DLL (unlikely)
@@ -1205,7 +1205,8 @@ class VLCEngine(QObject):
             if count > 0 and tracks_pp:
                 for i in range(count):
                     ptr = tracks_pp[i]
-                    if not ptr: continue
+                    if not ptr:
+                        continue
                     track = ptr.contents
                     
                     # Safe Decode Codec
@@ -1213,7 +1214,7 @@ class VLCEngine(QObject):
                     try:
                         codec_bytes = track.i_codec.to_bytes(4, byteorder='little')
                         codec_str = codec_bytes.decode('ascii', errors='ignore').replace('\x00', '')
-                    except:
+                    except Exception:
                         codec_str = str(track.i_codec)
 
                     # Safe Decode Original FourCC
@@ -1222,18 +1223,23 @@ class VLCEngine(QObject):
                         try:
                             orig_bytes = track.i_original_fourcc.to_bytes(4, byteorder='little')
                             orig_codec_str = orig_bytes.decode('ascii', errors='ignore').replace('\x00', '')
-                        except: pass
+                        except Exception:
+                            pass
 
                     # Safe Decode Strings
                     lang_str = None
                     if track.psz_language:
-                        try: lang_str = track.psz_language.decode('utf-8', errors='ignore')
-                        except: pass
+                        try:
+                            lang_str = track.psz_language.decode('utf-8', errors='ignore')
+                        except Exception:
+                            pass
                         
                     desc_str = None
                     if track.psz_description:
-                        try: desc_str = track.psz_description.decode('utf-8', errors='ignore')
-                        except: pass
+                        try:
+                            desc_str = track.psz_description.decode('utf-8', errors='ignore')
+                        except Exception:
+                            pass
 
                     # Basic Data
                     t_data = {
@@ -1266,7 +1272,8 @@ class VLCEngine(QObject):
                                     'orientation': v.i_orientation, # 0=Top-Left
                                     'projection': v.i_projection,
                                 }
-                            except: pass
+                            except Exception:
+                                pass
                             
                         elif track.i_type == 0: # Audio
                             try:
@@ -1275,7 +1282,8 @@ class VLCEngine(QObject):
                                     'channels': a.i_channels,
                                     'rate': a.i_rate
                                 }
-                            except: pass
+                            except Exception:
+                                pass
 
                         elif track.i_type == 2: # Subtitle
                             try:
@@ -1286,7 +1294,8 @@ class VLCEngine(QObject):
                                 t_data['subtitle'] = {
                                     'encoding': enc
                                 }
-                            except: pass
+                            except Exception:
+                                pass
 
                     result.append(t_data)
 
@@ -1451,14 +1460,7 @@ class VLCEngine(QObject):
     def set_audio_track(self, track_id: int):
         self.player.audio_set_track(track_id)
 
-    def set_audio_delay(self, delay_ms: int):
-        """Set audio delay in milliseconds."""
-        self.player.audio_set_delay(delay_ms * 1000) # VLC takes microseconds
-
-    def get_audio_delay(self) -> int:
-        """Get audio delay in milliseconds."""
-        return self.player.audio_get_delay() // 1000
-
+    
     # ─── Video Effects (Extended) ───────────────────────────
 
     def set_crop_borders(self, top=0, left=0, bottom=0, right=0):
@@ -1596,11 +1598,16 @@ class VLCEngine(QObject):
                 # State changed event
                 state = self.player.get_state()
                 state_str = "stopped"
-                if state == vlc.State.Playing: state_str = "playing"
-                elif state == vlc.State.Paused: state_str = "paused"
-                elif state == vlc.State.Stopped: state_str = "stopped"
-                elif state == vlc.State.Ended: state_str = "ended"
-                elif state == vlc.State.Error: state_str = "error"
+                if state == vlc.State.Playing:
+                    state_str = "playing"
+                elif state == vlc.State.Paused:
+                    state_str = "paused"
+                elif state == vlc.State.Stopped:
+                    state_str = "stopped"
+                elif state == vlc.State.Ended:
+                    state_str = "ended"
+                elif state == vlc.State.Error:
+                    state_str = "error"
                 
                 if state_str != self._last_state:
                     self._last_state = state_str
@@ -1662,11 +1669,16 @@ class VLCEngine(QObject):
 
         # Emit state if changed
         state_str = "stopped"
-        if state == vlc.State.Playing: state_str = "playing"
-        elif state == vlc.State.Paused: state_str = "paused"
-        elif state == vlc.State.Stopped: state_str = "stopped"
-        elif state == vlc.State.Ended: state_str = "ended"
-        elif state == vlc.State.Error: state_str = "error"
+        if state == vlc.State.Playing:
+            state_str = "playing"
+        elif state == vlc.State.Paused:
+            state_str = "paused"
+        elif state == vlc.State.Stopped:
+            state_str = "stopped"
+        elif state == vlc.State.Ended:
+            state_str = "ended"
+        elif state == vlc.State.Error:
+            state_str = "error"
 
         if state_str != self._last_state:
             self._last_state = state_str
@@ -1701,7 +1713,7 @@ class VLCEngine(QObject):
 
     # ─── Media Options ───────────────────────────────────────
 
-    def set_track_selection(self, audio_track: int = None, video_track: int = None, subtitle_track: int = None):
+    def set_track_selection(self, audio_track: Optional[int] = None, video_track: Optional[int] = None, subtitle_track: Optional[int] = None):
         """Select specific tracks for playback."""
         if hasattr(self, 'media'):
             if audio_track is not None:
@@ -1747,9 +1759,9 @@ class VLCEngine(QObject):
             if current_pos > 0:
                 self.seek(current_pos)
 
-    def set_playback_options(self, start_time: float = None, stop_time: float = None, 
-                           run_time: float = None, ab_loop_start: float = None, 
-                           ab_loop_stop: float = None):
+    def set_playback_options(self, start_time: Optional[float] = None, stop_time: Optional[float] = None, 
+                           run_time: Optional[float] = None, ab_loop_start: Optional[float] = None, 
+                           ab_loop_stop: Optional[float] = None):
         """Set playback start/stop times and A-B loop."""
         if hasattr(self, 'media'):
             if start_time is not None:
@@ -1779,7 +1791,7 @@ class VLCEngine(QObject):
             if current_pos > 0:
                 self.seek(current_pos)
 
-    def set_audio_options(self, audio_delay: int = None, audio_channel: int = None):
+    def set_audio_options(self, audio_delay: Optional[int] = None, audio_channel: Optional[int] = None):
         """Set audio-specific options."""
         if hasattr(self, 'media'):
             if audio_delay is not None:
@@ -1793,8 +1805,8 @@ class VLCEngine(QObject):
             if current_pos > 0:
                 self.seek(current_pos)
 
-    def set_video_options(self, video_width: int = None, video_height: int = None, 
-                         crop_geometry: str = None, aspect_ratio: str = None):
+    def set_video_options(self, video_width: Optional[int] = None, video_height: Optional[int] = None, 
+                         crop_geometry: Optional[str] = None, aspect_ratio: Optional[str] = None):
         """Set video-specific options."""
         if hasattr(self, 'media'):
             if video_width is not None and video_height is not None:
@@ -1811,8 +1823,8 @@ class VLCEngine(QObject):
             if current_pos > 0:
                 self.seek(current_pos)
 
-    def set_subtitle_options(self, subtitle_delay: int = None, subtitle_fps: float = None,
-                          subtitle_format: str = None, subtitle_encoding: str = None):
+    def set_subtitle_options(self, subtitle_delay: Optional[int] = None, subtitle_fps: Optional[float] = None,
+                          subtitle_format: Optional[str] = None, subtitle_encoding: Optional[str] = None):
         """Set subtitle-specific options."""
         if hasattr(self, 'media'):
             if subtitle_delay is not None:
@@ -1830,8 +1842,8 @@ class VLCEngine(QObject):
             if current_pos > 0:
                 self.seek(current_pos)
 
-    def set_network_options(self, http_user_agent: str = None, http_referrer: str = None,
-                          http_proxy: str = None, timeout: int = None):
+    def set_network_options(self, http_user_agent: Optional[str] = None, http_referrer: Optional[str] = None,
+                          http_proxy: Optional[str] = None, timeout: Optional[int] = None):
         """Set network streaming options."""
         if hasattr(self, 'media'):
             if http_user_agent is not None:

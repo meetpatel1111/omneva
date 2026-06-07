@@ -1,6 +1,6 @@
 """Plugin Manager Integration - Helper functions for integrating plugin manager into main window."""
 
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QVBoxLayout
 from src.ui.plugin_manager import PluginManagerWidget
 from src.core.logger import get_logger
 

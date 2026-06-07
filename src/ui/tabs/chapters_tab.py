@@ -4,7 +4,6 @@ Displays chapter list from source file with editable names.
 Supports import/export of chapter markers (CSV format).
 """
 import csv
-import io
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,

@@ -1,17 +1,11 @@
 """Telemetry Settings UI - Interface for configuring telemetry and crash reports."""
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QTextEdit, QGroupBox, QMessageBox, QFileDialog, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QProgressBar, QCheckBox, QFrame, QSplitter, QToolButton,
-    QMenu, QAction, QListWidget, QListWidgetItem, QDialog,
-    QDialogButtonBox, QTabWidget, QScrollArea, QSpinBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox, QCheckBox
 )
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtCore import Signal
 from src.core.logger import get_logger
-from src.core.telemetry import get_telemetry_manager, TelemetryConfig
+from src.core.telemetry import get_telemetry_manager
 
 
 class TelemetrySettingsWidget(QWidget):

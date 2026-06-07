@@ -1,7 +1,7 @@
 """Equalizer Widget — 10-Band Audio Equalizer."""
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QCheckBox, QComboBox, QDialogButtonBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QCheckBox, QComboBox
 )
 from PySide6.QtCore import Qt
 

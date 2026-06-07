@@ -1,13 +1,7 @@
 """Menu Factory — Handles construction of the application's menu bar."""
 
-from PySide6.QtWidgets import QMenuBar, QMenu
+from PySide6.QtWidgets import QMenuBar
 from PySide6.QtGui import QAction, QKeySequence
-from src.ui.metadata_integration import show_metadata_editor_dialog
-from src.ui.subtitle_integration import show_subtitle_downloader_dialog
-from src.ui.keyboard_integration import show_keyboard_navigation_settings
-from src.ui.plugin_manager import PluginManagerDialog
-from src.ui.telemetry_integration import show_telemetry_settings_dialog
-from src.ui.update_dialog import show_update_dialog, show_no_update_dialog
 
 class MenuFactory:
     """Factory to build and organize the complex VLC-style menu bar."""

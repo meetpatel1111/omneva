@@ -1,13 +1,13 @@
 """Keyboard-only navigation mode - Vim-style shortcuts with focus rings."""
 
 from PySide6.QtWidgets import (
-    QWidget, QApplication, QStyle, QStyleOption, QLabel, QPushButton,
-    QListWidget, QTreeWidget, QTableWidget, QAbstractItemView, QComboBox,
-    QLineEdit, QTextEdit, QCheckBox, QRadioButton, QSlider, QSpinBox,
-    QDoubleSpinBox, QGroupBox, QTabWidget, QScrollArea, QFrame
+    QWidget, QApplication, QLabel, QPushButton,
+    QListWidget, QTreeWidget, QTableWidget, QComboBox,
+    QLineEdit, QCheckBox, QSpinBox,
+    QGroupBox, QHBoxLayout, QVBoxLayout
 )
 from PySide6.QtCore import Qt, Signal, QObject, QTimer, QEvent
-from PySide6.QtGui import QKeyEvent, QFocusEvent, QPalette, QColor, QPainter, QPen
+from PySide6.QtGui import QKeyEvent, QColor
 from src.core.logger import get_logger
 
 

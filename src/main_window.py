@@ -4,13 +4,11 @@ import os
 import sys
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QStackedWidget, QSizePolicy, QFrame, QLabel,
-    QMenuBar, QMenu, QFileDialog, QInputDialog, QMessageBox,
+    QMainWindow, QWidget, QVBoxLayout, QPushButton, QStackedWidget, QFileDialog, QInputDialog, QMessageBox,
     QApplication, QSystemTrayIcon, QMenu, QStyle,
 )
-from PySide6.QtCore import Qt, QSize, QDateTime, QStandardPaths, QSettings, QEvent
-from PySide6.QtGui import QIcon, QAction, QKeySequence, QClipboard, QPalette
+from PySide6.QtCore import Qt, QDateTime, QStandardPaths, QEvent
+from PySide6.QtGui import QIcon, QAction, QKeySequence, QPalette
 from src.core.storage import storage
 from src.core.logger import get_logger
 from src.core.recovery_service import get_recovery_service, check_crash_recovery
@@ -20,7 +18,6 @@ from src.ui.library_panel import LibraryPanel
 from src.ui.transcoder_panel import TranscoderPanel
 from src.ui.converter_panel import ConverterPanel
 from src.ui.queue_panel import QueuePanel
-from src.ui.settings_dialog import SettingsDialog
 from src.core.history_service import HistoryService
 from src.ui.menus import MenuFactory
 from src.ui.dialogs.snapshot_preview_dialog import SnapshotPreviewDialog
@@ -281,7 +278,7 @@ class MainWindow(QMainWindow):
                     return "light"
             
             # Method 2: Windows registry check
-            if IS_WIN:
+            if os.name == 'nt':
                 try:
                     import winreg
                     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
@@ -332,11 +329,9 @@ class MainWindow(QMainWindow):
             palette = QApplication.palette()
             # Check if window background is dark (lower values = darker)
             window_bg = palette.color(QPalette.Window)
-            text_color = palette.color(QPalette.WindowText)
             
             # Calculate luminance (simplified)
             bg_luminance = (0.299 * window_bg.red() + 0.587 * window_bg.green() + 0.114 * window_bg.blue()) / 255
-            text_luminance = (0.299 * text_color.red() + 0.587 * text_color.green() + 0.114 * text_color.blue()) / 255
             
             # If background is darker than text, it's likely a dark theme
             if bg_luminance < 0.5:
@@ -1178,17 +1173,6 @@ class MainWindow(QMainWindow):
         self.player_page.set_fullscreen_mode(True)
         self.showFullScreen()
 
-    def _add_subtitle_file(self):
-        """Open dialog to load an external subtitle file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Open Subtitle File",
-            "",
-            "Subtitles (*.srt *.ass *.ssa *.vtt *.sub);;All Files (*)",
-        )
-        if path:
-            self.player_page.vlc.set_subtitle_file(path)
-
     def _exit_fullscreen(self):
         """Leave fullscreen — restore chrome."""
         self._is_fullscreen = False
@@ -1258,7 +1242,8 @@ class MainWindow(QMainWindow):
 
     def _add_to_recent(self, file_path: str):
         """Add file to recent list in QSettings and update menu."""
-        if not os.path.exists(file_path): return
+        if not os.path.exists(file_path):
+            return
         
         recent = self._settings.value("recentFiles", [])
         # Ensure list
@@ -1301,39 +1286,6 @@ class MainWindow(QMainWindow):
         self._update_recent_menu()
 
     # ─── Dynamic Menus ──────────────────────────────────────
-
-    def _populate_audio_tracks(self):
-        self.audio_track_menu.clear()
-        tracks = self.player_page.vlc.get_audio_tracks()
-        
-        # Add Disable option (usually id -1 or 0 depending on VLC version, but typically we just select a track)
-        # Actually VLC often has 'Disable' as id -1. But get_audio_tracks returns valid tracks.
-        
-        if not tracks:
-            self.audio_track_menu.addAction("(No audio tracks)").setEnabled(False)
-            return
-
-        for tid, name in tracks.items():
-            act = self.audio_track_menu.addAction(name)
-            act.setCheckable(True)
-            # We don't easily know current track from API wrapper yet, but could add get_audio_track()
-            # For now just connect action
-            act.triggered.connect(lambda checked=False, t=tid: self.player_page.vlc.set_audio_track(t))
-
-    def _populate_subtitle_tracks(self):
-        self.subtitle_track_menu.clear()
-        self.subtitle_track_menu.addAction("Add Subtitle File...", self._add_subtitle_file)
-        self.subtitle_track_menu.addSeparator()
-        
-        tracks = self.player_page.vlc.get_subtitle_tracks()
-        if not tracks:
-            self.subtitle_track_menu.addAction("(No subtitle tracks)").setEnabled(False)
-            return
-
-        for tid, name in tracks.items():
-            act = self.subtitle_track_menu.addAction(name)
-            act.setCheckable(True)
-            act.triggered.connect(lambda checked=False, t=tid: self.player_page.vlc.set_subtitle_track(t))
 
     def _populate_audio_devices(self):
         self.audio_device_menu.clear()
@@ -1398,6 +1350,7 @@ class MainWindow(QMainWindow):
 
     def _show_media_info(self):
         """Show Media Information Dialog (General tab)."""
+        from src.ui.tools_dialogs import MediaInfoDialog
         if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
             self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
         
@@ -1411,22 +1364,19 @@ class MainWindow(QMainWindow):
             self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=0)
             self.media_info_dlg.show()
 
-    def _show_codec_info(self):
-        """Show Media Information Dialog (Codec tab)."""
-        from src.ui.tools_dialogs import MediaInfoDialog
+    def _show_metadata_editor(self):
+        """Show Metadata Editor Dialog."""
+        from src.ui.metadata_editor import MetadataEditorDialog
+        if not hasattr(self, 'metadata_editor_dlg') or self.metadata_editor_dlg is None:
+            self.metadata_editor_dlg = MetadataEditorDialog(self)
         
-        if not hasattr(self, 'media_info_dlg') or self.media_info_dlg is None:
-            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=2)
-            
         try:
-            self.media_info_dlg.tabs.setCurrentIndex(2)
-            self.media_info_dlg.refresh_current_tab()
-            self.media_info_dlg.show()
-            self.media_info_dlg.raise_()
-            self.media_info_dlg.activateWindow()
+            self.metadata_editor_dlg.show()
+            self.metadata_editor_dlg.raise_()
+            self.metadata_editor_dlg.activateWindow()
         except RuntimeError:
-            self.media_info_dlg = MediaInfoDialog(self.player_page.vlc, self, initial_tab=2)
-            self.media_info_dlg.show()
+            self.metadata_editor_dlg = MetadataEditorDialog(self)
+            self.metadata_editor_dlg.show()
 
     def _show_about(self):
         from src.ui.tools_dialogs import AboutDialog

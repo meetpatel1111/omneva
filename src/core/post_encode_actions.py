@@ -4,7 +4,7 @@ import os
 import platform
 import subprocess
 from typing import Dict
-from PySide6.QtCore import QObject, QTimer, QUrl
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtMultimedia import QMediaPlayer
 
 from .logger import get_logger

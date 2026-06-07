@@ -78,7 +78,7 @@ def sign_windows_executable(exe_path, cert_path=None, timestamp_url=None, descri
     
     try:
         print(f"🔐 Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         print("✅ Windows executable signed successfully!")
         return True
     except subprocess.CalledProcessError as e:
@@ -120,12 +120,12 @@ def sign_macos_bundle(bundle_path, identity=None, entitlements=None):
     
     try:
         print(f"🔐 Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         print("✅ macOS bundle signed successfully!")
         
         # Verify the signature
         verify_cmd = ['codesign', '--verify', '--verbose', str(bundle_path)]
-        verify_result = subprocess.run(verify_cmd, capture_output=True, text=True, check=True)
+        subprocess.run(verify_cmd, capture_output=True, text=True, check=True)
         print("✅ Signature verified successfully!")
         return True
     except subprocess.CalledProcessError as e:

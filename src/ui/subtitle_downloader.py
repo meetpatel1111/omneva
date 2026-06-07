@@ -3,20 +3,15 @@
 import os
 import hashlib
 import requests
-import json
 import zipfile
 import tempfile
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QTextEdit, QGroupBox, QMessageBox, QFileDialog, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QProgressBar, QCheckBox, QFrame, QSplitter, QToolButton,
-    QMenu, QAction, QListWidget, QListWidgetItem
+    QGroupBox, QMessageBox, QFileDialog, QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
+    QProgressBar
 )
-from PySide6.QtCore import Qt, Signal, QThread, QObject, QTimer, QUrl
-from PySide6.QtGui import QIcon, QPixmap, QFont, QDesktopServices
+from PySide6.QtCore import Qt, Signal, QThread, QObject
 from src.core.logger import get_logger
-from src.core.storage import storage
 
 
 class OpenSubtitlesWorker(QObject):
@@ -32,7 +27,7 @@ class OpenSubtitlesWorker(QObject):
         super().__init__()
         self.logger = get_logger('opensubtitles_worker')
         self.api_base_url = "https://api.opensubtitles.com/rest/v1"
-        self.user_agent = "Omneva v1.4.0"
+        self.user_agent = "Omneva v1.4.1"
         self.should_stop = False
         
         # OpenSubtitles API credentials (you can register for free)

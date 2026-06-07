@@ -1,13 +1,12 @@
 """Summary Tab for Transcoder - Overview of encoding settings and preview."""
 
-import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QFrame, QScrollArea, QSizePolicy, QPushButton,
+    QCheckBox, QFrame, QSizePolicy, QPushButton,
     QTextEdit, QToolButton
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap
 
 class SummaryTab(QWidget):
     """

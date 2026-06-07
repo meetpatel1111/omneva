@@ -1,6 +1,6 @@
 """Metadata Editor Integration - Helper functions for integrating metadata editor into main window."""
 
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QVBoxLayout
 from src.ui.metadata_editor import MetadataEditorWidget
 from src.core.logger import get_logger
 

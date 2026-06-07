@@ -3,7 +3,6 @@
 import os
 import json
 import platform
-import sys
 from typing import Dict, Any, Optional
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QMessageBox
@@ -16,7 +15,7 @@ class TelemetryConfig:
     
     def __init__(self):
         self.logger = get_logger('telemetry_config')
-        self.config_file = os.path.join(storage.get_app_data_dir(), 'telemetry_config.json')
+        self.config_file = os.path.join(storage.app_data_dir, 'telemetry_config.json')
         
         self.default_config = {
             'enabled': False,
@@ -26,7 +25,7 @@ class TelemetryConfig:
             'error_reports': True,
             'user_id': None,
             'first_run': True,
-            'version': '1.4.0',
+            'version': '1.4.1',
             'last_prompt': None
         }
         
@@ -123,7 +122,7 @@ class TelemetryManager(QObject):
                 'processor': platform.processor(),
                 'python_version': platform.python_version(),
                 'python_implementation': platform.python_implementation(),
-                'app_version': self.config.get('version', '1.4.0')
+                'app_version': self.config.get('version', '1.4.1')
             }
             
             # Add Qt version if available
@@ -158,7 +157,7 @@ class TelemetryManager(QObject):
                 dsn=sentry_dsn,
                 traces_sample_rate=0.1,  # 10% of transactions
                 environment="production",
-                release=f"omneva@{self.config.get('version', '1.4.0')}",
+                release=f"omneva@{self.config.get('version', '1.4.1')}",
                 integrations=[QtIntegration()],
                 before_send=self._before_send_sentry,
                 ignore_errors=[
@@ -186,7 +185,7 @@ class TelemetryManager(QObject):
             # Set tags
             sentry_sdk.set_tags({
                 'platform': self.system_info.get('platform', 'unknown'),
-                'version': self.config.get('version', '1.4.0'),
+                'version': self.config.get('version', '1.4.1'),
                 'python_version': self.system_info.get('python_version', 'unknown')
             })
             
@@ -234,7 +233,7 @@ class TelemetryManager(QObject):
         # Add custom context
         event['contexts']['app'] = {
             'name': 'Omneva',
-            'version': self.config.get('version', '1.4.0'),
+            'version': self.config.get('version', '1.4.1'),
             'build': 'unknown'
         }
         
@@ -391,7 +390,7 @@ You can change this setting anytime in the preferences.
             
             # Add custom buttons
             enable_btn = msg.addButton("Enable Telemetry", QMessageBox.AcceptRole)
-            disable_btn = msg.addButton("Disable", QMessageBox.RejectRole)
+            msg.addButton("Disable", QMessageBox.RejectRole)
             
             # Set default to enable (helps us get more data)
             msg.setDefaultButton(enable_btn)

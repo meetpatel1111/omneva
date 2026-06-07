@@ -9,7 +9,6 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 
 from .logger import get_logger
-from .storage import storage
 
 
 @dataclass

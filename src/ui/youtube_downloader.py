@@ -2,17 +2,14 @@
 
 import os
 import subprocess
-import threading
 import json
-from urllib.parse import urlparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QTextEdit, QProgressBar, QComboBox, QCheckBox, QGroupBox,
     QMessageBox, QFileDialog, QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QFrame, QSplitter, QTabWidget, QSpinBox, QFormLayout
+    QFormLayout
 )
 from PySide6.QtCore import Qt, Signal, QThread, QObject, QTimer
-from PySide6.QtGui import QIcon, QPixmap
 from src.core.logger import get_logger
 from src.core.storage import storage
 
@@ -139,9 +136,6 @@ class YtDlpWorker(QObject):
             )
             
             # Monitor progress
-            total_size = 0
-            current_size = 0
-            
             for line in iter(self.process.stdout.readline, ''):
                 if self.should_stop:
                     break
@@ -159,7 +153,7 @@ class YtDlpWorker(QObject):
                                     percentage = float(part.rstrip('%'))
                                     self.progress_updated.emit("download", int(percentage), 100)
                                     break
-                    except:
+                    except Exception:
                         pass
             
             # Wait for completion
@@ -197,7 +191,7 @@ class YouTubeDownloaderPanel(QWidget):
         self.worker_thread = None
         self.current_url = ""
         self.available_formats = []
-        self.download_dir = os.path.join(storage.get_app_data_dir(), 'downloads')
+        self.download_dir = os.path.join(storage.app_data_dir, 'downloads')
         os.makedirs(self.download_dir, exist_ok=True)
         
         self._setup_ui()

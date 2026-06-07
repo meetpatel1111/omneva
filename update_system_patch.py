@@ -10,7 +10,7 @@ to integrate the auto-update check feature.
 # )
 
 # Add this to the MainWindow.__init__ method after other initializations:
-# initialize_update_system(self, "1.4.0")
+# initialize_update_system(self, "1.4.1")
 
 # Add this signal connection in _connect_signals method:
 # self.act_check_updates.triggered.connect(self._check_for_updates)

@@ -3,7 +3,6 @@
 import json
 import subprocess
 import os
-from functools import lru_cache
 from typing import Optional
 
 from src.core.utils import find_ffprobe, format_duration, format_size, format_bitrate

@@ -2,14 +2,13 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, 
-    QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, 
+    QSpinBox, QComboBox, QCheckBox, 
     QPushButton, QDialogButtonBox, QWidget, QGroupBox, QGridLayout,
     QTabWidget, QFormLayout, QTextEdit, QLineEdit, QTreeWidget, QTreeWidgetItem,
-    QRadioButton, QButtonGroup
+    QRadioButton, QFileDialog
 )
 
 from PySide6.QtCore import Qt, QTimer
-import vlc
 from src.ui.dialogs.sync_widget import SyncWidget
 from src.core.logger import get_logger
 from src.ui.dialogs.video_essential_widget import VideoEssentialWidget
@@ -17,7 +16,7 @@ from src.ui.dialogs.video_crop_widget import VideoCropWidget
 from src.ui.dialogs.video_overlay_widget import VideoOverlayWidget
 from src.ui.dialogs.video_advanced_widget import VideoAdvancedWidget
 from src.ui.dialogs.equalizer_widget import EqualizerWidget
-from src.ui.dialogs.audio_widgets import CompressorWidget, SpatializerWidget, StereoWidenerWidget
+from src.ui.dialogs.audio_widgets import CompressorWidget, SpatializerWidget
 
 
 
@@ -46,13 +45,13 @@ class JumpToTimeDialog(QDialog):
         self.h_spin.setRange(0, 99) # Allow many hours
         
         # Initial values
-        h = int(current_time_s // 3600)
-        m = int((current_time_s % 3600) // 60)
-        s = int(current_time_s % 60)
+        hours = int(current_time_s // 3600)
+        minutes = int((current_time_s % 3600) // 60)
+        seconds = int(current_time_s % 60)
         
-        self.h_spin.setValue(h)
-        self.m_spin.setValue(m)
-        self.s_spin.setValue(s)
+        self.h_spin.setValue(hours)
+        self.m_spin.setValue(minutes)
+        self.s_spin.setValue(seconds)
         
         form.addRow("Hours:", self.h_spin)
         form.addRow("Minutes:", self.m_spin)
@@ -60,8 +59,8 @@ class JumpToTimeDialog(QDialog):
         layout.addLayout(form)
         
         self.buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            Qt.Horizontal, self
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            Qt.Orientation.Horizontal, self
         )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -383,10 +382,14 @@ class MediaCodecWidget(QWidget):
                 # Best effort: Match by type and sequence.
                 
                 # Filter ff streams by type
-                if t_type_str == 'video': pool = ff_data.get('video_streams', [])
-                elif t_type_str == 'audio': pool = ff_data.get('audio_streams', [])
-                elif t_type_str == 'subtitle': pool = ff_data.get('subtitle_streams', [])
-                else: return None
+                if t_type_str == 'video':
+                    pool = ff_data.get('video_streams', [])
+                elif t_type_str == 'audio':
+                    pool = ff_data.get('audio_streams', [])
+                elif t_type_str == 'subtitle':
+                    pool = ff_data.get('subtitle_streams', [])
+                else:
+                    return None
                 
                 # We need to map VLC index to FF index. 
                 # This is tricky without stream ID matching.
@@ -400,22 +403,18 @@ class MediaCodecWidget(QWidget):
             for i, track in enumerate(tracks):
                 # Track type: -1=Unknown, 0=Audio, 1=Video, 2=Subtitle
                 t_type_id = track.get('type', -1)
-                t_type_str = "unknown"
                 ff_info = None
 
                 if t_type_id == 0: 
                     t_type = "Audio"
-                    t_type_str = 'audio'
                     ff_info = find_ff_stream('audio', a_cnt)
                     a_cnt += 1
                 elif t_type_id == 1: 
                     t_type = "Video"
-                    t_type_str = 'video'
                     ff_info = find_ff_stream('video', v_cnt)
                     v_cnt += 1
                 elif t_type_id == 2: 
                     t_type = "Subtitle"
-                    t_type_str = 'subtitle'
                     ff_info = find_ff_stream('subtitle', s_cnt)
                     s_cnt += 1
                 
@@ -442,13 +441,17 @@ class MediaCodecWidget(QWidget):
 
                 # Language
                 lang = track.get('language')
-                if not lang and ff_info: lang = ff_info.get('tags', {}).get('language')
-                if lang: self._add_item(stream_item, f"Language: {lang}")
+                if not lang and ff_info:
+                    lang = ff_info.get('tags', {}).get('language')
+                if lang:
+                    self._add_item(stream_item, f"Language: {lang}")
                 
                 # Description
                 desc = track.get('description')
-                if not desc and ff_info: desc = ff_info.get('tags', {}).get('title') # Title is often used as desc
-                if desc: self._add_item(stream_item, f"Description: {desc}")
+                if not desc and ff_info:
+                    desc = ff_info.get('tags', {}).get('title') # Title is often used as desc
+                if desc:
+                    self._add_item(stream_item, f"Description: {desc}")
                 
                 # Video Details
                 vid = track.get('video')
@@ -471,7 +474,8 @@ class MediaCodecWidget(QWidget):
                     if vid:
                          num = vid.get('frame_rate_num', 0)
                          den = vid.get('frame_rate_den', 0)
-                         if den > 0: fps = num/den
+                         if den > 0:
+                            fps = num/den
                     
                     if fps == 0 and ff_info:
                          fps = ff_info.get('fps', 0)
@@ -482,7 +486,8 @@ class MediaCodecWidget(QWidget):
                     # FFprobe Extras (Color, etc.)
                     if ff_info:
                         pix = ff_info.get('pixel_format')
-                        if pix: self._add_item(stream_item, f"Decoded format: {pix}") # Close enough to 'Planar 4:2:0 YUV' etc
+                        if pix:
+                            self._add_item(stream_item, f"Decoded format: {pix}") # Close enough to 'Planar 4:2:0 YUV' etc
                         
                         orient = vid.get('orientation', -1) if vid else -1
                         # Map internal or just skip if -1. 
@@ -494,45 +499,58 @@ class MediaCodecWidget(QWidget):
                              self._add_item(stream_item, f"Orientation: {orient_map.get(orient, 'Top left')}")
 
                         cp = ff_info.get('color_primaries')
-                        if cp: self._add_item(stream_item, f"Color primaries: {cp}")
+                        if cp:
+                            self._add_item(stream_item, f"Color primaries: {cp}")
                         
                         ct = ff_info.get('color_transfer')
-                        if ct: self._add_item(stream_item, f"Color transfer function: {ct}")
+                        if ct:
+                            self._add_item(stream_item, f"Color transfer function: {ct}")
                         
                         cs = ff_info.get('color_space')
-                        if cs: self._add_item(stream_item, f"Color space: {cs}")
+                        if cs:
+                            self._add_item(stream_item, f"Color space: {cs}")
                         
                         cr = ff_info.get('color_range')
-                        if cr: self._add_item(stream_item, f"Color range: {cr}")
+                        if cr:
+                            self._add_item(stream_item, f"Color range: {cr}")
 
                         chroma = ff_info.get('chroma_location')
-                        if chroma: self._add_item(stream_item, f"Chroma location: {chroma}")
+                        if chroma:
+                            self._add_item(stream_item, f"Chroma location: {chroma}")
 
                 # Audio Details
                 aud = track.get('audio')
                 if t_type_id == 0:
                     ch = 0
-                    if aud: ch = aud.get('channels', 0)
-                    if ch == 0 and ff_info: ch = ff_info.get('channels', 0)
+                    if aud:
+                        ch = aud.get('channels', 0)
+                    if ch == 0 and ff_info:
+                        ch = ff_info.get('channels', 0)
                     
                     if ch > 0:
                          layout = ""
-                         if ff_info: layout = ff_info.get('channel_layout')
+                         if ff_info:
+                            layout = ff_info.get('channel_layout')
                          
                          if layout:
                              self._add_item(stream_item, f"Channels: {ch}")
                              self._add_item(stream_item, f"Decoded channels: {layout}") # e.g. 3F2M/LFE
                          else:
                              msg = str(ch)
-                             if ch == 1: msg = "Mono"
-                             elif ch == 2: msg = "Stereo"
-                             elif ch == 6: msg = "3F2M/LFE" # Guess for 5.1
+                             if ch == 1:
+                                msg = "Mono"
+                             elif ch == 2:
+                                msg = "Stereo"
+                             elif ch == 6:
+                                msg = "3F2M/LFE" # Guess for 5.1
                              self._add_item(stream_item, f"Channels: {ch}")
                              self._add_item(stream_item, f"Decoded channels: {msg}")
 
                     rate = 0
-                    if aud: rate = aud.get('rate', 0)
-                    if rate == 0 and ff_info: rate = int(ff_info.get('sample_rate', 0))
+                    if aud:
+                        rate = aud.get('rate', 0)
+                    if rate == 0 and ff_info:
+                        rate = int(ff_info.get('sample_rate', 0))
                     
                     if rate > 0:
                         self._add_item(stream_item, f"Sample rate: {rate} Hz")
@@ -559,10 +577,14 @@ class MediaCodecWidget(QWidget):
 
                          # Fallback bits logic if not provided
                          if bits == 0:
-                             if 'flt' in s_fmt or 's32' in s_fmt: bits = 32
-                             elif 'dbl' in s_fmt: bits = 64
-                             elif 's16' in s_fmt: bits = 16
-                             elif 'u8' in s_fmt: bits = 8
+                             if 'flt' in s_fmt or 's32' in s_fmt:
+                                bits = 32
+                             elif 'dbl' in s_fmt:
+                                bits = 64
+                             elif 's16' in s_fmt:
+                                bits = 16
+                             elif 'u8' in s_fmt:
+                                bits = 8
                          
                          # Get readable description or use raw format
                          desc = fmt_map.get(s_fmt, s_fmt)
@@ -582,16 +604,20 @@ class MediaCodecWidget(QWidget):
 
                 # General fields
                 tid = track.get('id', -1)
-                if tid != -1: self._add_item(stream_item, f"ID: {tid}")
+                if tid != -1:
+                    self._add_item(stream_item, f"ID: {tid}")
                 
                 prof = track.get('profile', -1)
-                if prof != -1: self._add_item(stream_item, f"Profile: {prof}")
+                if prof != -1:
+                    self._add_item(stream_item, f"Profile: {prof}")
                 
                 lvl = track.get('level', -1)
-                if lvl != -1 and lvl != 0: self._add_item(stream_item, f"Level: {lvl}")
+                if lvl != -1 and lvl != 0:
+                    self._add_item(stream_item, f"Level: {lvl}")
                 
                 bitrate = track.get('bitrate', 0)
-                if bitrate == 0 and ff_info: bitrate = ff_info.get('bitrate', 0)
+                if bitrate == 0 and ff_info:
+                    bitrate = ff_info.get('bitrate', 0)
                 
                 if bitrate > 0:
                      self._add_item(stream_item, f"Bitrate: {bitrate // 1000} kb/s")
@@ -627,10 +653,10 @@ class MediaStatsWidget(QWidget):
         row = 0
         for grp, items in groups:
             gb = QGroupBox(grp)
-            l = QFormLayout(gb)
+            layout = QFormLayout(gb)
             for item in items:
                 lbl = QLabel("0")
-                l.addRow(item, lbl)
+                layout.addRow(item, lbl)
                 self.labels[item] = lbl
             layout.addWidget(gb, row, 0)
             row += 1
@@ -647,7 +673,8 @@ class MediaStatsWidget(QWidget):
         # Don't log spam
         try:
             stats = self.vlc.get_stats()
-            if not stats: return
+            if not stats:
+                return
             
             # Helper to safely get attributes
             def safe_get(obj, attr, default=0):
@@ -679,7 +706,7 @@ class MediaStatsWidget(QWidget):
             
             set_lbl("Discarded (corrupted)", safe_get(stats, 'demux_corrupted'))
             set_lbl("Dropped (discontinued)", safe_get(stats, 'demux_discontinued'))
-        except Exception as e:
+        except Exception:
             pass
 
 class MediaInfoDialog(QDialog):
@@ -939,9 +966,12 @@ class OpenDiscDialog(QDialog):
     def get_mrl(self) -> str:
         """Construct VLC MRL."""
         drive = self.drive_combo.currentText()
-        if self.radio_bluray.isChecked(): protocol = "bluray://"
-        elif self.radio_audio_cd.isChecked(): protocol = "cdda://"
-        else: protocol = "dvd://"
+        if self.radio_bluray.isChecked():
+            protocol = "bluray://"
+        elif self.radio_audio_cd.isChecked():
+            protocol = "cdda://"
+        else:
+            protocol = "dvd://"
         
         # Title/Chapter options
         mrl = f"{protocol}{drive}"
@@ -981,8 +1011,11 @@ class VideoEffectsDialog(QDialog):
             row.addWidget(QLabel(label))
             s = QSlider(Qt.Horizontal)
             s.setRange(0, 200) # 100 is default (1.0)
-            if label == "Hue": s.setRange(-180, 180); s.setValue(0)
-            else: s.setValue(100)
+            if label == "Hue":
+                s.setRange(-180, 180)
+                s.setValue(0)
+            else:
+                s.setValue(100)
             
             s.valueChanged.connect(lambda v, o=opt: self._on_adjust_changed(o, v))
             row.addWidget(s)
@@ -1061,9 +1094,9 @@ class PreferencesDialog(QDialog):
         # Add some placeholder text for each tab
         for i in range(self.tabs.count()):
             tab = self.tabs.widget(i)
-            l = QVBoxLayout(tab)
-            l.addWidget(QLabel(f"{self.tabs.tabText(i)} settings will be available here."))
-            l.addStretch()
+            tab_layout = QVBoxLayout(tab)
+            tab_layout.addWidget(QLabel(f"{self.tabs.tabText(i)} settings will be available here."))
+            tab_layout.addStretch()
             
         layout.addWidget(self.tabs)
         

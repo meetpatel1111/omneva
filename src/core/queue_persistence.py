@@ -3,9 +3,7 @@
 import os
 import sqlite3
 import json
-from datetime import datetime
 from typing import List, Dict, Optional
-from dataclasses import asdict
 
 from src.core.ffmpeg_service import TranscodeJob
 from .logger import get_logger
@@ -14,7 +12,7 @@ from .logger import get_logger
 class QueuePersistence:
     """SQLite database for persisting transcode jobs across application restarts."""
     
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: Optional[str] = None):
         self.logger = get_logger('queue_persistence')
         
         # Default database path in user data directory
@@ -88,7 +86,7 @@ class QueuePersistence:
             self.logger.error(f"Failed to save job {job.id}: {e}")
             return False
     
-    def update_job_status(self, job_id: str, status: str, progress: float = None, error: str = None) -> bool:
+    def update_job_status(self, job_id: str, status: str, progress: Optional[float] = None, error: Optional[str] = None) -> bool:
         """Update job status, progress, and/or error."""
         try:
             with sqlite3.connect(self.db_path) as conn:

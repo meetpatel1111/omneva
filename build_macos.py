@@ -6,16 +6,14 @@ Creates proper Info.plist files and enhances macOS app bundles
 
 import os
 import sys
-import subprocess
 import plistlib
 from pathlib import Path
-from datetime import datetime
 
 def get_script_dir():
     """Get the directory where this script is located"""
     return Path(__file__).parent
 
-def create_info_plist(app_bundle_path, version="1.4.0"):
+def create_info_plist(app_bundle_path, version="1.4.1"):
     """Create a proper Info.plist file for the macOS app bundle"""
     print(f"📝 Creating Info.plist for {app_bundle_path}")
     
@@ -52,12 +50,11 @@ def create_info_plist(app_bundle_path, version="1.4.0"):
             }
         ],
         'LSApplicationCategoryType': 'public.app-category.video',
-        'NSHumanReadableCopyright': f'© 2026 Meetkumar Patel. All rights reserved.',
+        'NSHumanReadableCopyright': '© 2026 Meetkumar Patel. All rights reserved.',
         'CFBundleGetInfoString': f'Omneva Media Player {version} - A powerful, feature-rich media player with transcoding capabilities',
         'NSPrincipalClass': 'NSApplication',
         'CFBundleDevelopmentRegion': 'en',
         'CFBundleAllowMixedLocalizations': True,
-        'NSRequiresAquaSystemAppearance': False,
         'NSAppTransportSecurity': {
             'NSAllowsArbitraryLoads': True
         },
@@ -111,7 +108,7 @@ def create_app_directory_structure(app_bundle_path):
 
 def copy_resources_to_bundle(app_bundle_path, source_dir):
     """Copy necessary resources to the app bundle"""
-    print(f"📦 Copying resources to app bundle...")
+    print("📦 Copying resources to app bundle...")
     
     resources_dir = app_bundle_path / 'Contents' / 'Resources'
     source_path = Path(source_dir)
@@ -142,7 +139,7 @@ def copy_resources_to_bundle(app_bundle_path, source_dir):
 
 def copy_icon_to_bundle(app_bundle_path):
     """Copy the app icon to the bundle"""
-    print(f"🎨 Copying app icon to bundle...")
+    print("🎨 Copying app icon to bundle...")
     
     resources_dir = app_bundle_path / 'Contents' / 'Resources'
     icon_path = get_script_dir() / 'src' / 'assets' / 'icon.icns'
@@ -163,7 +160,7 @@ def copy_icon_to_bundle(app_bundle_path):
 
 def create_pkg_info(app_bundle_path):
     """Create PkgInfo file for the app bundle"""
-    print(f"📄 Creating PkgInfo file...")
+    print("📄 Creating PkgInfo file...")
     
     pkg_info_path = app_bundle_path / 'Contents' / 'PkgInfo'
     
@@ -182,7 +179,7 @@ def create_pkg_info(app_bundle_path):
 
 def create_version_plist(app_bundle_path, version="1.2.0"):
     """Create version.plist file for the app bundle"""
-    print(f"📄 Creating version.plist file...")
+    print("📄 Creating version.plist file...")
     
     version_plist_path = app_bundle_path / 'Contents' / 'version.plist'
     

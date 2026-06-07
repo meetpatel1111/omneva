@@ -121,3 +121,12 @@ omneva_thumbnails/
 *.tmp
 temp/
 cache/
+Omneva.exe
+
+# v1.4.0 specific files
+portable_windows_onefile/
+update_config.json
+telemetry_config.json
+plugin_data/
+*.backup
+*.bak

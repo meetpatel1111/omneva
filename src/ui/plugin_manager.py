@@ -1,18 +1,12 @@
 """Plugin Manager UI - Interface for managing Omneva plugins."""
 
-import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QTextEdit, QGroupBox, QMessageBox, QFileDialog, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QProgressBar, QCheckBox, QFrame, QSplitter, QToolButton,
-    QMenu, QAction, QListWidget, QListWidgetItem, QDialog,
-    QDialogButtonBox, QTabWidget, QScrollArea
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox, QFormLayout,
+    QCheckBox, QSplitter, QListWidget, QListWidgetItem
 )
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtCore import Qt
 from src.core.logger import get_logger
-from src.core.plugin_system import PluginManager, BasePlugin, create_example_plugin
+from src.core.plugin_system import PluginManager, create_example_plugin
 
 
 class PluginInfoWidget(QWidget):

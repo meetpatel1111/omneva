@@ -4,7 +4,6 @@ Icon Generation Script for Omneva Media Player
 Converts SVG icon to .ico (Windows) and .icns (macOS) formats
 """
 
-import os
 import sys
 import subprocess
 import argparse
@@ -170,7 +169,7 @@ def render_path(draw, element, svg_width, svg_height, png_size):
                     coords = list(map(float, d.split()[d.split().index(command)+1:d.split().index(command)+3]))
                     if len(coords) >= 2:
                         points.append((coords[0], coords[1]))
-                except:
+                except Exception:
                     continue
         
         if len(points) >= 2:
@@ -288,8 +287,6 @@ def try_create_icns_fallback(png_paths, icns_path):
         # Create a basic ICNS with the largest available PNG
         largest_png = max(png_paths, key=lambda p: p.stat().st_size if p.exists() else 0)
         if largest_png.exists():
-            img = Image.open(largest_png)
-            
             # Create a simple ICNS header and write the PNG data
             # This is a very basic implementation
             with open(icns_path, 'wb') as f:

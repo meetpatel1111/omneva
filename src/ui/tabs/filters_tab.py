@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QGroupBox, QGridLayout
+    QCheckBox, QGroupBox
 )
 from PySide6.QtCore import Qt
 

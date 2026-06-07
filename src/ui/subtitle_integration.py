@@ -1,6 +1,6 @@
 """Subtitle Downloader Integration - Helper functions for integrating subtitle downloader into main window."""
 
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QVBoxLayout
 from src.ui.subtitle_downloader import SubtitleDownloaderWidget
 from src.core.logger import get_logger
 

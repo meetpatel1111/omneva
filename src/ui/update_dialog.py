@@ -1,17 +1,12 @@
 """Update Dialog - Interface for displaying update information and changelog."""
 
 import os
-import webbrowser
+from typing import Dict, Any
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QTextEdit, QGroupBox, QMessageBox, QFileDialog, QFormLayout,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QProgressBar, QCheckBox, QFrame, QSplitter, QToolButton,
-    QMenu, QAction, QListWidget, QListWidgetItem, QDialog,
-    QDialogButtonBox, QTabWidget, QScrollArea, QSpinBox, QCheckBox
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QGroupBox, QMessageBox, QProgressBar, QDialog
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread, pyqtSignal, QObject
-from PySide6.QtGui import QIcon, QPixmap, QFont, QDesktopServices, QUrl
+from PySide6.QtCore import Qt, Signal, QThread, QObject, QUrl
+from PySide6.QtGui import QDesktopServices
 from src.core.logger import get_logger
 from src.core.updater import get_update_checker, get_update_downloader, get_update_config
 
@@ -19,9 +14,9 @@ from src.core.updater import get_update_checker, get_update_downloader, get_upda
 class UpdateDownloadWorker(QObject):
     """Worker for downloading updates."""
     
-    progress = pyqtSignal(int)  # download progress
-    completed = pyqtSignal(str)  # download completed
-    failed = pyqtSignal(str)  # download failed
+    progress = Signal(int)  # download progress
+    completed = Signal(str)  # download completed
+    failed = Signal(str)  # download failed
     
     def __init__(self, url: str, filename: str):
         super().__init__()
@@ -114,7 +109,7 @@ class UpdateDialog(QDialog):
         current_label.setStyleSheet("color: #cccccc; font-size: 11px;")
         version_info_layout.addWidget(current_label)
         
-        self.current_version_label = QLabel("1.4.0")
+        self.current_version_label = QLabel("1.4.1")
         self.current_version_label.setStyleSheet("""
             QLabel {
                 color: #888888;
@@ -472,7 +467,7 @@ class NoUpdateDialog(QDialog):
         layout.addWidget(message_label)
         
         # Current version
-        version_label = QLabel("Current version: 1.4.0 (Stable)")
+        version_label = QLabel("Current version: 1.4.1 (Stable)")
         version_label.setStyleSheet("""
             QLabel {
                 font-size: 12px;

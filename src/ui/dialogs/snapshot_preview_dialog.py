@@ -3,10 +3,10 @@
 import os
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QSizePolicy, QMessageBox, QFileDialog
+    QFrame, QScrollArea, QMessageBox, QFileDialog
 )
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QPixmap, QImage, QPainter, QPen
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from src.core.logger import get_logger
 
 
@@ -191,7 +191,7 @@ class SnapshotPreviewDialog(QDialog):
         if self.temp_path and os.path.exists(self.temp_path):
             try:
                 os.remove(self.temp_path)
-            except:
+            except Exception:
                 pass
         
         super().closeEvent(event)

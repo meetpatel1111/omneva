@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QFormLayout, QDialogButtonBox,
-    QGroupBox, QSlider, QSpinBox
+    QGroupBox, QSlider
 )
 from PySide6.QtCore import Qt
 from src.core.storage import storage

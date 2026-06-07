@@ -1,7 +1,6 @@
 """Keyboard Navigation Integration - Helper functions for integrating keyboard navigation into main window."""
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QWidget
 from src.ui.keyboard_navigation import KeyboardNavigationManager, KeyboardNavigationSettings
 from src.core.logger import get_logger
 

@@ -2,7 +2,6 @@
 
 import os
 import sqlite3
-import sys
 from PySide6.QtCore import QSettings, QStandardPaths
 from .logger import get_logger
 

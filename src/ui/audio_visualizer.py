@@ -1,9 +1,9 @@
 """Audio Visualizer - FFT bar visualization overlay for audio files."""
 
 import numpy as np
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from PySide6.QtCore import Qt, QTimer, Signal, QRectF, QPointF
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QLinearGradient
+from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QPainter, QColor, QBrush, QLinearGradient
 from src.core.logger import get_logger
 
 
@@ -154,7 +154,6 @@ class AudioVisualizerWidget(QWidget):
     
     def _draw_bars(self, painter):
         """Draw frequency bars with gradient colors."""
-        width = self.width()
         height = self.height()
         
         for i in range(self.bar_count):

@@ -1,7 +1,6 @@
 """Telemetry Integration - Helper functions for integrating telemetry into main window."""
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
 from src.ui.telemetry_settings import TelemetrySettingsWidget
 from src.core.telemetry import initialize_telemetry, get_telemetry_manager
 from src.core.logger import get_logger

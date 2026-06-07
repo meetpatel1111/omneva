@@ -6,7 +6,6 @@ import zipfile
 import tempfile
 import urllib.request
 import time
-from typing import Callable
 from PySide6.QtCore import QObject, Signal, QRunnable, QThreadPool
 from .logger import get_logger
 
@@ -138,7 +137,7 @@ class DownloadWorker(QRunnable):
                 try:
                     if 'tmp_path' in locals():
                         os.unlink(tmp_path)
-                except:
+                except Exception:
                     pass
         
         # All retries failed

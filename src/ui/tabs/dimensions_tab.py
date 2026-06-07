@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QSpinBox, QGroupBox, QGridLayout, QFrame
+    QCheckBox, QSpinBox, QGroupBox, QGridLayout
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -231,13 +231,20 @@ class DimensionsTab(QWidget):
         # "No Limit", "4320p 8K", "2160p 4K", "1440p 2K", "1080p HD", ...
         
         target_h = 1080 # Default fallback
-        if "4320p" in limit_text: target_h = 4320
-        elif "2160p" in limit_text: target_h = 2160
-        elif "1440p" in limit_text: target_h = 1440
-        elif "1080p" in limit_text: target_h = 1080
-        elif "720p" in limit_text: target_h = 720
-        elif "576p" in limit_text: target_h = 576
-        elif "480p" in limit_text: target_h = 480
+        if "4320p" in limit_text:
+            target_h = 4320
+        elif "2160p" in limit_text:
+            target_h = 2160
+        elif "1440p" in limit_text:
+            target_h = 1440
+        elif "1080p" in limit_text:
+            target_h = 1080
+        elif "720p" in limit_text:
+            target_h = 720
+        elif "576p" in limit_text:
+            target_h = 576
+        elif "480p" in limit_text:
+            target_h = 480
         elif "No Limit" in limit_text:
             # Just use source dimensions
             self.spin_width.setValue(self._source_width)
@@ -259,8 +266,10 @@ class DimensionsTab(QWidget):
         new_w = int(new_h * aspect)
         
         # Ensure divisible by 2 (standard requirement)
-        if new_w % 2 != 0: new_w += 1
-        if new_h % 2 != 0: new_h += 1
+        if new_w % 2 != 0:
+            new_w += 1
+        if new_h % 2 != 0:
+            new_h += 1
 
         self.spin_width.blockSignals(True)
         self.spin_height.blockSignals(True)

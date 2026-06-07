@@ -1,8 +1,7 @@
 """Video Overlay Widget — Logo and Marquee Text Controls."""
 
-import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, 
+    QWidget, QHBoxLayout, QGroupBox, QGridLayout, 
     QLabel, QLineEdit, QSpinBox, QSlider, QComboBox, QPushButton, QFileDialog
 )
 from PySide6.QtCore import Qt

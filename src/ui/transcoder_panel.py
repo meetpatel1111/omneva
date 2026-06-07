@@ -9,13 +9,13 @@ from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QListWidget, QListWidgetItem,
     QGroupBox, QLineEdit, QTabWidget, QFrame, QMessageBox
 )
-from PySide6.QtCore import Qt, Signal, QSettings, QThread, QObject
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtGui import QPixmap
 
 from src.core.ffmpeg_service import FFmpegService, PRESETS
 from src.core.ffprobe_service import FFprobeService
 from src.core.queue_manager import QueueManager
-from src.core.utils import format_duration, is_media_file
+from src.core.utils import is_media_file
 from src.core.storage import storage
 from src.core.logger import get_logger
 from src.core.security import safe_subprocess_run
@@ -520,12 +520,7 @@ class TranscoderPanel(QWidget):
             self.logger.error(f"Failed to get job states: {e}")
         return job_states
 
-    def cleanup(self):
-        """Clean up resources when panel is destroyed."""
-        if hasattr(self, '_ffprobe_thread') and self._ffprobe_thread.isRunning():
-            self._ffprobe_thread.quit()
-            self._ffprobe_thread.wait(1000)  # Wait up to 1 second for thread to finish
-
+    
     # ─── Preset Changed ─────────────────────────────────────
 
     def _on_preset_changed(self):

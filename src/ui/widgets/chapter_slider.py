@@ -4,8 +4,8 @@ Custom seek slider with chapter markers support.
 
 from typing import List, Dict, Optional
 from PySide6.QtWidgets import QSlider, QStyle, QStyleOptionSlider
-from PySide6.QtCore import Qt, QRect, QPoint
-from PySide6.QtGui import QFont, QPaintEvent, QPainter, QPen, QBrush, QColor
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QFont, QPaintEvent, QPainter, QPen, QColor
 
 
 class ChapterSlider(QSlider):

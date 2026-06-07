@@ -1,7 +1,6 @@
 """FFmpeg Service — Transcoding, conversion, and media processing via subprocess."""
 
 import os
-import re
 import subprocess
 import signal
 from dataclasses import dataclass, field
@@ -865,7 +864,7 @@ class FFmpegService:
                 if 'h264_amf' in encoder_output or 'hevc_amf' in encoder_output:
                     hardware_encoders['amf'] = True
                     
-        except Exception as e:
+        except Exception:
             # If we can't check encoders, assume no hardware acceleration
             pass
             

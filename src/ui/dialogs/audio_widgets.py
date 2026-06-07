@@ -37,7 +37,7 @@ class CompressorWidget(QWidget):
             slider.setValue(int(def_v*10))
             
             val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
+            slider.valueChanged.connect(lambda v, label=val_lbl: label.setText(f"{v/10.0:.1f}"))
             
             vbox = QVBoxLayout()
             vbox.addWidget(slider, 0, Qt.AlignHCenter)
@@ -87,7 +87,7 @@ class SpatializerWidget(QWidget):
             slider.setValue(int(def_v*10))
             
             val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
+            slider.valueChanged.connect(lambda v, label=val_lbl: label.setText(f"{v/10.0:.1f}"))
             
             vbox = QVBoxLayout()
             vbox.addWidget(slider, 0, Qt.AlignHCenter)
@@ -136,7 +136,7 @@ class StereoWidenerWidget(QWidget):
             slider.setValue(int(def_v*10))
             
             val_lbl = QLabel(f"{def_v}")
-            slider.valueChanged.connect(lambda v, l=val_lbl: l.setText(f"{v/10.0:.1f}"))
+            slider.valueChanged.connect(lambda v, label=val_lbl: label.setText(f"{v/10.0:.1f}"))
             
             vbox = QVBoxLayout()
             vbox.addWidget(slider, 0, Qt.AlignHCenter)

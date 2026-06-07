@@ -4,10 +4,8 @@ import os
 import json
 import requests
 import threading
-import subprocess
-from typing import Dict, Any, Optional, List, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer, QThread, pyqtSignal
-from PySide6.QtWidgets import QMessageBox, QWidget
+from typing import Dict, Any, Optional
+from PySide6.QtCore import QObject, Signal, QTimer
 from src.core.logger import get_logger
 from src.core.storage import storage
 
@@ -27,7 +25,7 @@ class UpdateChecker(QObject):
         
         self.github_api_url = "https://api.github.com/repos/meetkumar1111/omneva/releases"
         self.github_tags_url = "https://api.github.com/repos/meetkumar1111/omneva/git/refs/tags"
-        self.current_version = "1.4.0"
+        self.current_version = "1.4.1"
         self.check_interval = 24 * 60 * 60 * 1000  # 24 hours in milliseconds
         
         self.auto_check_timer = QTimer()
@@ -93,7 +91,6 @@ class UpdateChecker(QObject):
         
         # Sort tags by date (most recent first)
         latest_tag = None
-        latest_date = None
         
         for tag in tags:
             tag_name = tag.get('ref', '').replace('refs/tags/', '')
@@ -327,7 +324,7 @@ class UpdateChecker(QObject):
             changelog = f"# {name or tag_name}\n\n"
             
             if is_tag:
-                changelog += f"**Type:** Git Tag\n"
+                changelog += "**Type:** Git Tag\n"
                 changelog += f"**Tag:** {tag_name}\n\n"
                 if body:
                     changelog += f"**Description:** {body}\n\n"
@@ -343,7 +340,7 @@ class UpdateChecker(QObject):
                         pub_date = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
                         formatted_date = pub_date.strftime('%B %d, %Y')
                         changelog += f"Published: {formatted_date}\n\n"
-                    except:
+                    except Exception:
                         changelog += f"Published: {published_at}\n\n"
                 
                 changelog += body
@@ -414,7 +411,7 @@ class UpdateDownloader(QObject):
         """Download function for thread."""
         try:
             # Create download directory
-            download_dir = os.path.join(storage.get_app_data_dir(), 'updates')
+            download_dir = os.path.join(storage.app_data_dir, 'updates')
             os.makedirs(download_dir, exist_ok=True)
             
             file_path = os.path.join(download_dir, filename)
@@ -463,7 +460,7 @@ class UpdateConfig:
     
     def __init__(self):
         self.logger = get_logger('update_config')
-        self.config_file = os.path.join(storage.get_app_data_dir(), 'update_config.json')
+        self.config_file = os.path.join(storage.app_data_dir, 'update_config.json')
         
         self.default_config = {
             'auto_check_enabled': True,
@@ -584,7 +581,7 @@ def get_update_config() -> UpdateConfig:
     return _update_config
 
 
-def initialize_updater(current_version: str = "1.4.0"):
+def initialize_updater(current_version: str = "1.4.1"):
     """Initialize the update system."""
     checker = get_update_checker()
     checker.set_current_version(current_version)

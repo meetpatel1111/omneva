@@ -106,7 +106,7 @@ class PluginManager(QObject):
         self.plugin_classes: Dict[str, Type[BasePlugin]] = {}
         
         self.plugin_directories = [
-            os.path.join(storage.get_app_data_dir(), 'plugins'),
+            os.path.join(storage.app_data_dir, 'plugins'),
             os.path.join(os.path.dirname(__file__), '..', 'plugins'),
             os.path.join(os.path.dirname(__file__), '..', '..', 'plugins')  # For development
         ]
@@ -438,7 +438,7 @@ class ExamplePlugin(BasePlugin):
 # Plugin loader utility functions
 def create_example_plugin():
     """Create an example plugin file for users."""
-    plugins_dir = os.path.join(storage.get_app_data_dir(), 'plugins')
+    plugins_dir = os.path.join(storage.app_data_dir, 'plugins')
     os.makedirs(plugins_dir, exist_ok=True)
     
     example_plugin_path = os.path.join(plugins_dir, 'example_plugin.py')

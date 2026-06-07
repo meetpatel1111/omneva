@@ -5,11 +5,10 @@ import os
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QPushButton, QLineEdit, QLabel, QFrame, QMessageBox, QInputDialog,
-    QMenu, QAbstractItemView, QStyle
+    QPushButton, QLineEdit, QLabel, QMessageBox, QMenu, QDialog, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIcon, QAction, QCursor, QPixmap
+from PySide6.QtGui import QAction
 from src.core.logger import get_logger
 from src.core.storage import storage
 
@@ -198,7 +197,7 @@ class NetworkBookmarksPanel(QWidget):
         self.logger = get_logger('network_bookmarks')
         
         self.bookmarks = []
-        self.bookmarks_file = os.path.join(storage.get_app_data_dir(), 'network_bookmarks.json')
+        self.bookmarks_file = os.path.join(storage.app_data_dir, 'network_bookmarks.json')
         
         self._setup_ui()
         self._load_bookmarks()

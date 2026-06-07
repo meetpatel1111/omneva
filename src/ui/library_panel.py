@@ -1,19 +1,20 @@
 """Library Panel — Playlist and Media Browser."""
 
 import os
-import sys
+import hashlib
+from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTreeView, QSplitter, QFileDialog, QHeaderView, QFrame,
     QLineEdit, QListView, QStackedWidget, QListWidget, QListWidgetItem,
     QTableView, QAbstractItemView
 )
-from PySide6.QtCore import Qt, Signal, QDir, QSize, QModelIndex, QThread, QObject, QSortFilterProxyModel
+from PySide6.QtCore import Qt, Signal, QDir, QSize, QObject, QSortFilterProxyModel
 from PySide6.QtWidgets import QFileSystemModel
 
 from src.core.ffprobe_service import FFprobeService
 from src.core.ffmpeg_service import FFmpegService
-from src.core.utils import is_media_file, format_duration, get_icon
+from src.core.utils import is_media_file, get_icon
 from src.core.playlist_model import PlaylistModel
 from src.ui.network_bookmarks import NetworkBookmarksPanel
 from src.ui.youtube_downloader import YouTubeDownloaderPanel
@@ -22,13 +23,12 @@ from src.ui.youtube_downloader import YouTubeDownloaderPanel
 class ThumbnailCache:
     """Cache for storing and managing thumbnail images."""
     
-    def __init__(self, cache_dir: str = None):
+    def __init__(self, cache_dir: Optional[str] = None):
         import tempfile
-        import hashlib
         
         self.cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "omneva_thumbnails")
         os.makedirs(self.cache_dir, exist_ok=True)
-        self._cache = {}
+        self._cache: dict[str, str] = {}
         
     def get_thumbnail_path(self, file_path: str) -> str:
         """Get cached thumbnail path for a file."""
@@ -38,7 +38,7 @@ class ThumbnailCache:
             hash_input = f"{file_path}_{mtime}"
             hash_hex = hashlib.md5(hash_input.encode()).hexdigest()
             return os.path.join(self.cache_dir, f"{hash_hex}.jpg")
-        except:
+        except Exception:
             return os.path.join(self.cache_dir, f"{hashlib.md5(file_path.encode()).hexdigest()}.jpg")
     
     def has_thumbnail(self, file_path: str) -> bool:
@@ -156,7 +156,7 @@ class MetadataPanel(QFrame):
         fmt = meta["format"]
         lines = [
             f"<b>{meta['file_name']}</b>",
-            f"",
+            "",
             f"<b>Format:</b> {fmt['long_name']}",
             f"<b>Duration:</b> {fmt['duration_str']}",
             f"<b>Size:</b> {fmt['size_str']}",
@@ -165,7 +165,7 @@ class MetadataPanel(QFrame):
 
         # Video streams
         for i, vs in enumerate(meta.get("video_streams", [])):
-            lines.append(f"")
+            lines.append("")
             lines.append(f"<b>Video #{i+1}:</b> {vs['codec'].upper()}")
             lines.append(f"  {vs['resolution']} @ {vs['fps']}fps")
             if vs['bitrate_str'] != 'N/A':
@@ -173,7 +173,7 @@ class MetadataPanel(QFrame):
 
         # Audio streams
         for i, as_ in enumerate(meta.get("audio_streams", [])):
-            lines.append(f"")
+            lines.append("")
             lines.append(f"<b>Audio #{i+1}:</b> {as_['codec'].upper()}")
             lines.append(f"  {as_['channels']}ch, {as_['sample_rate']}Hz")
             if as_['bitrate_str'] != 'N/A':
@@ -339,12 +339,12 @@ class FileBrowserWidget(QWidget):
             self.view_stack.setCurrentWidget(self.tree)
         elif mode == self.VIEW_ICONS:
             self.view_stack.setCurrentWidget(self.list_view)
-            self.list_view.setViewMode(QListView.IconMode)
+            self.list_view.setViewMode(QListView.ViewMode.IconMode)
             self.list_view.setGridSize(QSize(100, 100))
             self.list_view.setIconSize(QSize(64, 64))
         elif mode == self.VIEW_LIST:
             self.view_stack.setCurrentWidget(self.list_view)
-            self.list_view.setViewMode(QListView.ListMode)
+            self.list_view.setViewMode(QListView.ViewMode.ListMode)
             self.list_view.setGridSize(QSize()) 
             self.list_view.setIconSize(QSize(16, 16))
 
@@ -640,7 +640,8 @@ class LibraryPanel(QWidget):
             print(f"Error cleaning up thumbnail thread: {e}")
 
     def _on_sidebar_changed(self, current, previous):
-        if not current: return
+        if not current:
+            return
         data = current.data(Qt.UserRole)
         
         if data == "playlist":

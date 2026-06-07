@@ -4,11 +4,10 @@ import os
 import random
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QSizePolicy, QFileDialog, QGraphicsOpacityEffect,
-    QListView, QTableView, QAbstractItemView, QHeaderView
+    QSlider, QFrame, QSizePolicy, QFileDialog, QTableView, QAbstractItemView, QHeaderView
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve, QThread, QObject
-from PySide6.QtGui import QMouseEvent, QCursor, QIcon
+from PySide6.QtCore import Qt, Signal, QTimer, QObject
+from PySide6.QtGui import QCursor
 
 from src.core.vlc_engine import VLCEngine
 from src.core.ffprobe_service import FFprobeService
@@ -611,7 +610,8 @@ class PlayerWidget(QWidget):
             
     def _play_next(self):
         count = self.playlist_model.rowCount()
-        if count == 0: return
+        if count == 0:
+            return
 
         current_idx = self.playlist_model.get_current_index()
         next_idx = -1
@@ -634,7 +634,8 @@ class PlayerWidget(QWidget):
         
     def _play_prev(self):
         count = self.playlist_model.rowCount()
-        if count == 0: return
+        if count == 0:
+            return
         
         current_idx = self.playlist_model.get_current_index()
         prev_idx = (current_idx - 1) % count
@@ -680,7 +681,7 @@ class PlayerWidget(QWidget):
         self.fullscreen_requested.emit()
 
     def _toggle_record(self):
-        path = self.vlc.toggle_record()
+        self.vlc.toggle_record()
         # Provide feedback
         if self.vlc.is_recording:
              self.controls.btn_adv_record.setStyleSheet("QPushButton { background-color: #f44336; color: white; border: 1px solid #d32f2f; }")
@@ -914,7 +915,6 @@ class PlayerWidget(QWidget):
 
     def _show_tracks_menu(self):
         from PySide6.QtWidgets import QMenu
-        from PySide6.QtGui import QAction
         
         menu = QMenu(self)
         
@@ -1010,7 +1010,8 @@ class PlayerWidget(QWidget):
 
         elif key == Qt.Key_B:
             track = self.vlc.cycle_audio_track()
-            if track: self._show_info(f"Audio Track: {track}")
+            if track:
+                self._show_info(f"Audio Track: {track}")
         elif key == Qt.Key_K:
             if modifiers & Qt.ShiftModifier:
                 if modifiers & Qt.ControlModifier:
@@ -1198,10 +1199,14 @@ class PlayerWidget(QWidget):
             msg = self.vlc.toggle_autoscale()
             self._show_info(msg)
         elif modifiers & Qt.AltModifier:
-            if key == Qt.Key_1: self.resize_requested.emit(0.25)
-            elif key == Qt.Key_2: self.resize_requested.emit(0.5)
-            elif key == Qt.Key_3: self.resize_requested.emit(1.0)
-            elif key == Qt.Key_4: self.resize_requested.emit(2.0)
+            if key == Qt.Key_1:
+                self.resize_requested.emit(0.25)
+            elif key == Qt.Key_2:
+                self.resize_requested.emit(0.5)
+            elif key == Qt.Key_3:
+                self.resize_requested.emit(1.0)
+            elif key == Qt.Key_4:
+                self.resize_requested.emit(2.0)
             
         elif key == Qt.Key_PageUp:
             msg = self.vlc.change_viewpoint_fov(-5) # Shrink FOV (Zoom in)
@@ -1226,7 +1231,8 @@ class PlayerWidget(QWidget):
              self._show_info("Interface Visible")
         elif key >= Qt.Key_F1 and key <= Qt.Key_F12:
             idx = key - Qt.Key_F1 + 1
-            if idx > 10: return
+            if idx > 10:
+                return
             
             if modifiers & Qt.ControlModifier:
                 # Set Bookmark
